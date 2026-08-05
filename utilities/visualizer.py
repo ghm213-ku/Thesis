@@ -3,21 +3,49 @@ from dash import html, Input, Output
 import dash_cytoscape as cyto
 
 
-def _nx_to_cyto_elements(nx_g, is_metagraph=False):
+def _nx_to_cyto_elements(nx_g, is_metagraph=False, highlight_nodes=None):
     """Helper function to convert NetworkX to Cytoscape JSON."""
+    if highlight_nodes is None:
+        highlight_nodes = []
+        
+    # Convert highlight list to strings just in case they were passed as integers
+    highlight_nodes = [str(n) for n in highlight_nodes]
+    
     elements = []
-
+    
+    # 1. Process Nodes
     for node, data in nx_g.nodes(data=True):
-        elements.append({"data": {"id": str(node), "label": str(node)}})
-
-    for u, v, data in nx_g.edges(data=True):
-        edge_data = {"source": str(u), "target": str(v)}
+        node_data = {'data': {'id': str(node), 'label': str(node)}}
+        
+        # If this node is in our highlight list, tag it with a CSS class
+        if is_metagraph and str(node) in highlight_nodes:
+            node_data['classes'] = 'highlighted-node'
+            
+        elements.append(node_data)
+        
+    # 2. Process Edges
+    is_multi = nx_g.is_multigraph()
+    edges = nx_g.edges(data=True, keys=True) if is_multi else nx_g.edges(data=True)
+    
+    for edge in edges:
+        if is_multi:
+            u, v, key, data = edge
+            edge_id = f"{u}-{v}-{key}" 
+        else:
+            u, v, data = edge
+            edge_id = f"{u}-{v}"
+            
+        edge_data = {
+            'source': str(u), 
+            'target': str(v), 
+            'id': edge_id
+        }
+        
         if is_metagraph:
-            edge_data["label"] = (
-                f"{data.get('operation', '')} (w={data.get('weight', '')})"
-            )
-        elements.append({"data": edge_data})
-
+            edge_data['label'] = f"{data.get('operation', '')} (w={data.get('weight', '')})"
+            
+        elements.append({'data': edge_data})
+        
     return elements
 
 
@@ -51,7 +79,7 @@ def run_dashboard(meta_graph, port=8050):
                         # 1. TUNE THE PHYSICS: Force nodes further apart
                         layout={
                             "name": "cose",
-                            "nodeRepulsion": 400000,  # Push nodes far apart
+                            "nodeRepulsion": 900000,  # Push nodes far apart
                             "idealEdgeLength": 150,  # Make edges longer
                             "nodeOverlap": 10,
                             "padding": 30,
@@ -77,9 +105,10 @@ def run_dashboard(meta_graph, port=8050):
                                     "content": "data(label)",
                                     "font-size": "11px",
                                     "curve-style": "bezier",
-                                    "target-arrow-shape": "triangle",  # <--- ADDS ARROWS
-                                    "target-arrow-color": "#999999",  # Arrow color
-                                    "line-color": "#999999",  # Line color
+                                    "control-point-step-size": 70,  # <--- ADDS SPACING BETWEEN MULTIPLE EDGES
+                                    "target-arrow-shape": "triangle",
+                                    "target-arrow-color": "#999999",
+                                    "line-color": "#999999",
                                     "text-background-opacity": 1,
                                     "text-background-color": "#ffffff",
                                     "text-background-padding": "4px",
