@@ -3,25 +3,32 @@ from dash import html, Input, Output
 import dash_cytoscape as cyto
 
 
-def _nx_to_cyto_elements(nx_g, is_metagraph=False, highlight_nodes=None):
-    """Helper function to convert NetworkX to Cytoscape JSON."""
+def _nx_to_cyto_elements(
+    nx_g, is_metagraph=False, highlight_nodes=None, highlight_edges=None
+):
     if highlight_nodes is None:
         highlight_nodes = []
+    if highlight_edges is None:
+        highlight_edges = []
 
-    # Convert highlight list to strings just in case they were passed as integers
     highlight_nodes = [str(n) for n in highlight_nodes]
+
+    # Pre-process edge tuples into string IDs (handles both regular and multi-graphs)
+    highlight_edge_ids = set()
+    for edge in highlight_edges:
+        if len(edge) == 3:  # MultiDiGraph: (u, v, key)
+            highlight_edge_ids.add(f"{edge[0]}-{edge[1]}-{edge[2]}")
+        elif len(edge) == 2:  # DiGraph: (u, v)
+            highlight_edge_ids.add(f"{edge[0]}-{edge[1]}")
 
     elements = []
 
     # 1. Process Nodes
     for node, data in nx_g.nodes(data=True):
-        node_data = {"data": {"id": str(node), "label": str(node)}}
-
-        # If this node is in our highlight list, tag it with a CSS class
+        node_dict = {"data": {"id": str(node), "label": str(node)}}
         if is_metagraph and str(node) in highlight_nodes:
-            node_data["classes"] = "highlighted-node"
-
-        elements.append(node_data)
+            node_dict["classes"] = "highlighted-node"
+        elements.append(node_dict)
 
     # 2. Process Edges
     is_multi = nx_g.is_multigraph()
@@ -42,13 +49,19 @@ def _nx_to_cyto_elements(nx_g, is_metagraph=False, highlight_nodes=None):
                 f"{data.get('operation', '')} (w={data.get('weight', '')})"
             )
 
-        elements.append({"data": edge_data})
+        edge_dict = {"data": edge_data}
+
+        # Tag the edge if it's in our highlight list
+        if is_metagraph and edge_id in highlight_edge_ids:
+            edge_dict["classes"] = "highlighted-edge"
+
+        elements.append(edge_dict)
 
     return elements
 
 
 # Add highlight_nodes as an optional parameter
-def run_dashboard(meta_graph, highlight_nodes=None, port=8050):
+def run_dashboard(meta_graph, highlight_nodes=None, highlight_edges=None, port=8050):
     app = dash.Dash(__name__)
 
     app.layout = html.Div(
@@ -59,7 +72,6 @@ def run_dashboard(meta_graph, highlight_nodes=None, port=8050):
             "fontFamily": "sans-serif",
         },
         children=[
-            # LEFT PANEL
             html.Div(
                 style={
                     "width": "60%",
@@ -70,11 +82,12 @@ def run_dashboard(meta_graph, highlight_nodes=None, port=8050):
                     html.H2("Metagraph"),
                     cyto.Cytoscape(
                         id="meta-graph-view",
-                        # Pass the highlight list into the helper here:
+                        # Pass both highlight lists to the helper:
                         elements=_nx_to_cyto_elements(
                             meta_graph,
                             is_metagraph=True,
                             highlight_nodes=highlight_nodes,
+                            highlight_edges=highlight_edges,
                         ),
                         layout={
                             "name": "cose",
@@ -85,7 +98,7 @@ def run_dashboard(meta_graph, highlight_nodes=None, port=8050):
                         },
                         style={"width": "100%", "height": "800px"},
                         stylesheet=[
-                            # Default Node Style
+                            # --- Nodes ---
                             {
                                 "selector": "node",
                                 "style": {
@@ -96,18 +109,17 @@ def run_dashboard(meta_graph, highlight_nodes=None, port=8050):
                                     "text-margin-y": "5px",
                                 },
                             },
-                            # HIGHLIGHTED NODE STYLE (Takes priority over default)
                             {
                                 "selector": ".highlighted-node",
                                 "style": {
-                                    "background-color": "#FF4136",  # Bright Red
-                                    "border-color": "#85144b",  # Dark Red Border
+                                    "background-color": "#FF4136",
+                                    "border-color": "#85144b",
                                     "border-width": 3,
-                                    "color": "#FF4136",  # Make text red too
+                                    "color": "#FF4136",
                                     "font-weight": "bold",
                                 },
                             },
-                            # Edge Style
+                            # --- Edges ---
                             {
                                 "selector": "edge",
                                 "style": {
@@ -125,6 +137,20 @@ def run_dashboard(meta_graph, highlight_nodes=None, port=8050):
                                     "text-border-color": "#dddddd",
                                     "text-border-width": 1,
                                     "color": "#333333",
+                                },
+                            },
+                            # HIGHLIGHTED EDGE STYLE
+                            {
+                                "selector": ".highlighted-edge",
+                                "style": {
+                                    "line-color": "#FF4136",  # Red line
+                                    "target-arrow-color": "#FF4136",  # Red arrow
+                                    "width": 4,  # Thicker line
+                                    "text-border-color": "#FF4136",  # Red border around the label box
+                                    "text-border-width": 2,
+                                    "color": "#FF4136",  # Red text
+                                    "font-weight": "bold",
+                                    "z-index": 999,  # Bring highlighted edge to the front
                                 },
                             },
                         ],
@@ -167,7 +193,6 @@ def run_dashboard(meta_graph, highlight_nodes=None, port=8050):
         ],
     )
 
-    # Keep your exact same callback here...
     @app.callback(
         [
             Output("inner-graph-view", "elements"),

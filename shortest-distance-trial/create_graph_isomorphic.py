@@ -88,7 +88,7 @@ def shortest_path(meta_graph: nx.Graph, target_graph: nx.Graph):
                 continue
 
             edge_data = meta_graph.get_edge_data(current_node, neighbor)
-            for _, edge in edge_data.items():
+            for key, edge in edge_data.items():
                 if is_path_valid(path_so_far + [edge]):
                     edge_weight = edge.get("weight", 1)
                     node_queue.put(
@@ -103,6 +103,7 @@ def shortest_path(meta_graph: nx.Graph, target_graph: nx.Graph):
                                     "target": neighbor,
                                     "operation": edge.get("operation"),
                                     "weight": edge_weight,
+                                    "edge_key": key,
                                 }
                             ],
                         )
@@ -189,7 +190,7 @@ def get_multigraph_execution_path(
     return execution_sequence
 
 
-def get_path_nodes_from_path(path: list) -> list:
+def get_highlighted_items_from_path(path: list) -> tuple[list, list]:
     """
     Extracts the unique nodes from a given path.
 
@@ -200,10 +201,12 @@ def get_path_nodes_from_path(path: list) -> list:
         A list of unique nodes in the path.
     """
     nodes = set()
+    edges = []
     for step in path:
         nodes.add(step.get("source"))
         nodes.add(step.get("target"))
-    return set(nodes)
+        edges.append((step.get("source"), step.get("target"), step.get("edge_key")))
+    return list(nodes), edges
 
 
 def get_signature(graph: nx.Graph, is_isomorphic: bool = False) -> tuple:
@@ -217,7 +220,7 @@ def get_signature(graph: nx.Graph, is_isomorphic: bool = False) -> tuple:
         A tuple containing sorted nodes and sorted edges of the graph.
     """
     if is_isomorphic:
-        return nx.weisfeiler_lehman_graph_hash(G)
+        return nx.weisfeiler_lehman_graph_hash(graph)
     return (tuple(sorted(graph.nodes())), tuple(sorted(graph.edges())))
 
 
@@ -458,6 +461,11 @@ if __name__ == "__main__":
 
     path = get_custom_multigraph_execution_path(meta_graph, target_graph)
 
-    highlighted_nodes = get_path_nodes_from_path(path)
+    highlighted_nodes, highlighted_edges = get_highlighted_items_from_path(path)
 
-    visualizer.run_dashboard(meta_graph, highlight_nodes=highlighted_nodes, port=8050)
+    visualizer.run_dashboard(
+        meta_graph,
+        highlight_nodes=highlighted_nodes,
+        highlight_edges=highlighted_edges,
+        port=8050,
+    )
