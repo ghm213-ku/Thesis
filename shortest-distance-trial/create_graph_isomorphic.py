@@ -189,21 +189,35 @@ def get_multigraph_execution_path(
     return execution_sequence
 
 
-def get_isomorphic_signature(G: nx.Graph) -> str:
-    # This returns a string that is identical for any two isomorphic graphs
-    return nx.weisfeiler_lehman_graph_hash(G)
+def get_path_nodes_from_path(path: list) -> list:
+    """
+    Extracts the unique nodes from a given path.
+
+    Args:
+        path: A list of steps representing the path.
+
+    Returns:
+        A list of unique nodes in the path.
+    """
+    nodes = set()
+    for step in path:
+        nodes.add(step.get("source"))
+        nodes.add(step.get("target"))
+    return set(nodes)
 
 
-def get_signature(graph: nx.Graph) -> tuple:
+def get_signature(graph: nx.Graph, is_isomorphic: bool = False) -> tuple:
     """
     Get a unique signature for the graph based on its nodes and edges.
 
     Args:
         graph: The graph for which to get the signature.
-
+        is_isomorphic: If True, use the isomorphic signature; otherwise, use the standard signature.
     Returns:
         A tuple containing sorted nodes and sorted edges of the graph.
     """
+    if is_isomorphic:
+        return nx.weisfeiler_lehman_graph_hash(G)
     return (tuple(sorted(graph.nodes())), tuple(sorted(graph.edges())))
 
 
@@ -442,6 +456,8 @@ if __name__ == "__main__":
 
     meta_graph, graph_index = create_graph(n)
 
-    get_custom_multigraph_execution_path(meta_graph, target_graph)
+    path = get_custom_multigraph_execution_path(meta_graph, target_graph)
 
-    visualizer.run_dashboard(meta_graph, port=8050)
+    highlighted_nodes = get_path_nodes_from_path(path)
+
+    visualizer.run_dashboard(meta_graph, highlight_nodes=highlighted_nodes, port=8050)

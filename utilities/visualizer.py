@@ -7,55 +7,50 @@ def _nx_to_cyto_elements(nx_g, is_metagraph=False, highlight_nodes=None):
     """Helper function to convert NetworkX to Cytoscape JSON."""
     if highlight_nodes is None:
         highlight_nodes = []
-        
+
     # Convert highlight list to strings just in case they were passed as integers
     highlight_nodes = [str(n) for n in highlight_nodes]
-    
+
     elements = []
-    
+
     # 1. Process Nodes
     for node, data in nx_g.nodes(data=True):
-        node_data = {'data': {'id': str(node), 'label': str(node)}}
-        
+        node_data = {"data": {"id": str(node), "label": str(node)}}
+
         # If this node is in our highlight list, tag it with a CSS class
         if is_metagraph and str(node) in highlight_nodes:
-            node_data['classes'] = 'highlighted-node'
-            
+            node_data["classes"] = "highlighted-node"
+
         elements.append(node_data)
-        
+
     # 2. Process Edges
     is_multi = nx_g.is_multigraph()
     edges = nx_g.edges(data=True, keys=True) if is_multi else nx_g.edges(data=True)
-    
+
     for edge in edges:
         if is_multi:
             u, v, key, data = edge
-            edge_id = f"{u}-{v}-{key}" 
+            edge_id = f"{u}-{v}-{key}"
         else:
             u, v, data = edge
             edge_id = f"{u}-{v}"
-            
-        edge_data = {
-            'source': str(u), 
-            'target': str(v), 
-            'id': edge_id
-        }
-        
+
+        edge_data = {"source": str(u), "target": str(v), "id": edge_id}
+
         if is_metagraph:
-            edge_data['label'] = f"{data.get('operation', '')} (w={data.get('weight', '')})"
-            
-        elements.append({'data': edge_data})
-        
+            edge_data["label"] = (
+                f"{data.get('operation', '')} (w={data.get('weight', '')})"
+            )
+
+        elements.append({"data": edge_data})
+
     return elements
 
 
-def run_dashboard(meta_graph, port=8050):
-    """
-    Initializes and runs the Dash web application using the provided metagraph.
-    """
+# Add highlight_nodes as an optional parameter
+def run_dashboard(meta_graph, highlight_nodes=None, port=8050):
     app = dash.Dash(__name__)
 
-    # Define the layout using the passed meta_graph
     app.layout = html.Div(
         style={
             "display": "flex",
@@ -75,37 +70,51 @@ def run_dashboard(meta_graph, port=8050):
                     html.H2("Metagraph"),
                     cyto.Cytoscape(
                         id="meta-graph-view",
-                        elements=_nx_to_cyto_elements(meta_graph, is_metagraph=True),
-                        # 1. TUNE THE PHYSICS: Force nodes further apart
+                        # Pass the highlight list into the helper here:
+                        elements=_nx_to_cyto_elements(
+                            meta_graph,
+                            is_metagraph=True,
+                            highlight_nodes=highlight_nodes,
+                        ),
                         layout={
                             "name": "cose",
-                            "nodeRepulsion": 900000,  # Push nodes far apart
-                            "idealEdgeLength": 150,  # Make edges longer
+                            "nodeRepulsion": 400000,
+                            "idealEdgeLength": 150,
                             "nodeOverlap": 10,
                             "padding": 30,
                         },
                         style={"width": "100%", "height": "800px"},
                         stylesheet=[
-                            # 2. FIX NODE HITBOXES: Move labels below the nodes
+                            # Default Node Style
                             {
                                 "selector": "node",
                                 "style": {
                                     "content": "data(label)",
                                     "background-color": "#0074D9",
-                                    "text-valign": "bottom",  # Puts text below the circle
+                                    "text-valign": "bottom",
                                     "text-halign": "center",
-                                    "text-margin-y": "5px",  # Adds a small gap
+                                    "text-margin-y": "5px",
                                 },
                             },
-                            # 3. FIX EDGE READABILITY: Add a solid background to edge text
-                            # 3. FIX EDGE READABILITY & ADD ARROWS
+                            # HIGHLIGHTED NODE STYLE (Takes priority over default)
+                            {
+                                "selector": ".highlighted-node",
+                                "style": {
+                                    "background-color": "#FF4136",  # Bright Red
+                                    "border-color": "#85144b",  # Dark Red Border
+                                    "border-width": 3,
+                                    "color": "#FF4136",  # Make text red too
+                                    "font-weight": "bold",
+                                },
+                            },
+                            # Edge Style
                             {
                                 "selector": "edge",
                                 "style": {
                                     "content": "data(label)",
                                     "font-size": "11px",
                                     "curve-style": "bezier",
-                                    "control-point-step-size": 70,  # <--- ADDS SPACING BETWEEN MULTIPLE EDGES
+                                    "control-point-step-size": 70,
                                     "target-arrow-shape": "triangle",
                                     "target-arrow-color": "#999999",
                                     "line-color": "#999999",
@@ -122,7 +131,7 @@ def run_dashboard(meta_graph, port=8050):
                     ),
                 ],
             ),
-            # RIGHT PANEL
+            # RIGHT PANEL (Unchanged)
             html.Div(
                 style={"width": "40%", "padding": "10px"},
                 children=[
@@ -132,9 +141,7 @@ def run_dashboard(meta_graph, port=8050):
                     cyto.Cytoscape(
                         id="inner-graph-view",
                         elements=[],
-                        layout={
-                            "name": "circle",
-                        },
+                        layout={"name": "circle"},
                         style={"width": "100%", "height": "600px"},
                         stylesheet=[
                             {
@@ -144,7 +151,15 @@ def run_dashboard(meta_graph, port=8050):
                                     "background-color": "#FF851B",
                                 },
                             },
-                            {"selector": "edge", "style": {"curve-style": "bezier"}},
+                            {
+                                "selector": "edge",
+                                "style": {
+                                    "curve-style": "bezier",
+                                    "target-arrow-shape": "triangle",
+                                    "target-arrow-color": "#999999",
+                                    "line-color": "#999999",
+                                },
+                            },
                         ],
                     ),
                 ],
@@ -152,7 +167,7 @@ def run_dashboard(meta_graph, port=8050):
         ],
     )
 
-    # Define the callback inside the wrapper so it has access to `meta_graph`
+    # Keep your exact same callback here...
     @app.callback(
         [
             Output("inner-graph-view", "elements"),
