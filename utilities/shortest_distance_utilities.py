@@ -88,7 +88,7 @@ def get_highlighted_items_from_path(path: list) -> tuple[list, list]:
         edges.append((step.get("source"), step.get("target"), step.get("edge_key")))
     return list(nodes), edges
 
-
+# @profile
 def get_signature(graph: nx.Graph, is_isomorphic: bool = False) -> tuple:
     """
     Get a unique signature for the graph based on its nodes and edges.
@@ -134,70 +134,7 @@ def print_shortest_path(path: list):
     print(f"Total Minimum Cost: {total_cost}")
 
 
-def get_multigraph_execution_path(
-    multi_graph, source_node, target_node, weight_attr="weight"
-):
-    try:
-        # 1. Get the raw node path
-        node_path = nx.dijkstra_path(
-            multi_graph, source_node, target_node, weight=weight_attr
-        )
-    except nx.NetworkXNoPath:
-        print(f"No valid path exists between {source_node} and {target_node}.")
-        return []
-
-    execution_sequence = []
-    total_cost = 0
-
-    print(f"--- Optimal Path from {source_node} to {target_node} ---")
-
-    # 2. Iterate through the path step-by-step
-    for i in range(len(node_path) - 1):
-        u = node_path[i]
-        v = node_path[i + 1]
-
-        # In a MultiGraph, get_edge_data returns a dictionary of ALL edges between u and v
-        # Format: { edge_key_0: {data}, edge_key_1: {data} }
-        all_edges = multi_graph.get_edge_data(u, v)
-
-        # 3. Find the specific edge that Dijkstra actually used (the one with the lowest weight)
-        best_edge_key = None
-        min_weight = float("inf")
-
-        for key, edge_data in all_edges.items():
-            # Get the weight (fallback to 1 if missing, which is NetworkX's default behavior)
-            current_weight = edge_data.get(weight_attr, 1)
-
-            if current_weight < min_weight:
-                min_weight = current_weight
-                best_edge_key = key
-
-        # 4. Extract the exact operation and data
-        best_edge_data = all_edges[best_edge_key]
-        operation = best_edge_data.get("operation", "unknown_operation")
-
-        print(f"Step {i+1}: {u} -> {v}")
-        print(f"  Operation : {operation} (Edge Key: {best_edge_key})")
-        print(f"  Cost      : {min_weight}")
-
-        total_cost += min_weight
-        execution_sequence.append(
-            {
-                "source": u,
-                "target": v,
-                "edge_key": best_edge_key,
-                "operation": operation,
-                "weight": min_weight,
-                "full_data": best_edge_data,
-            }
-        )
-
-    print(f"----------------------------------------")
-    print(f"Total Minimum Cost: {total_cost}")
-
-    return execution_sequence
-
-
+# @profile
 def shortest_path(meta_graph: nx.Graph, target_graph: nx.Graph):
     """
     Find the shortest path in a multi-graph from source_node to target_node using Dijkstra's algorithm.
@@ -219,14 +156,17 @@ def shortest_path(meta_graph: nx.Graph, target_graph: nx.Graph):
 
     while not node_queue.empty():
         cumulative_weight, _, current_node, path_so_far = node_queue.get()
-        print(f"Visiting node: {current_node}, Cumulative weight: {cumulative_weight}")
+        # print(f"Visiting node: {current_node}, Cumulative weight: {cumulative_weight}")
 
         if nx.is_isomorphic(meta_graph.nodes[current_node]["graph"], target_graph):
             # if sorted(meta_graph.nodes[current_node]["graph"].edges()) == sorted(
             #     target_graph.edges()
             # ):
-            print(f"Target graph found at node: {current_node}")
+            # print(f"Target graph found at node: {current_node}")
             return path_so_far
+        connected_components_current = nx.number_connected_components(
+            meta_graph.nodes[current_node]["graph"]
+        )
 
         for neighbor in meta_graph.neighbors(current_node):
             if neighbor not in visited:
@@ -243,7 +183,10 @@ def shortest_path(meta_graph: nx.Graph, target_graph: nx.Graph):
                         "weight": weight,
                     }
                 ]
-                if is_op_sequence_valid(meta_graph.number_of_nodes(), new_path):
+                connected_components_neighbor = nx.number_connected_components(
+                    meta_graph.nodes[neighbor]["graph"]
+                )
+                if connected_components_neighbor <= connected_components_current:
                     node_queue.put(
                         (
                             cumulative_weight + weight,

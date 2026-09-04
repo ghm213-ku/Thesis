@@ -22,8 +22,10 @@ def local_complement(G: nx.Graph, vertex: int) -> nx.Graph:
     G_copy = G.copy()
     neighbors = list(G_copy.neighbors(vertex))
 
-    for i, u in enumerate(neighbors):
-        for v in neighbors[i + 1 :]:
+    for i in range(len(neighbors)):
+        for j in range(i + 1, len(neighbors)):
+            u = neighbors[i]
+            v = neighbors[j]
             if G_copy.has_edge(u, v):
                 G_copy.remove_edge(u, v)
             else:
@@ -102,7 +104,6 @@ def f_gate(G: nx.Graph, i: int, j: int) -> nx.Graph:
         elif k != i:
             G_copy.add_edge(i, k)
 
-
     G_copy.add_edge(i, j)
 
     return G_copy
@@ -122,7 +123,6 @@ def gen_bell_tree(n: int) -> nx.Graph:
         raise ValueError("n must be even")
 
     G = nx.Graph()
-    G.add_nodes_from(range(n))
 
     for i in range(1, n // 2 + 1):
         q1 = 2 * i - 2

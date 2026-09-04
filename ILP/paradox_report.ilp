@@ -1,0 +1,254 @@
+\ Model Minimize_Cost_copy
+\ LP format - for model browsing. Use MPS format to capture full model detail.
+\ Signature: 0x4d9146a962465764
+Minimize
+ 
+Subject To
+ Dummy_E_LB_3_1_2: E_3_1_2 + y_dummy_3 - E_4_1_2 <= 1
+ Dummy_E_UB_0_1_3: y_dummy_0 - E_0_1_3 + E_1_1_3 <= 1
+ Dummy_E_UB_1_1_3: - E_1_1_3 + y_dummy_1 + E_2_1_3 <= 1
+ Dummy_E_UB_2_1_3: - E_2_1_3 + y_dummy_2 + E_3_1_3 <= 1
+ Dummy_E_UB_3_1_3: - E_3_1_3 + y_dummy_3 + E_4_1_3 <= 1
+ Dummy_Mono_0: - y_dummy_0 + y_dummy_1 >= 0
+ Dummy_Mono_1: - y_dummy_1 + y_dummy_2 >= 0
+ Final_E_0_3: E_4_0_3 = 0
+ Final_E_1_2: E_4_1_2 = 0
+ Final_E_1_3: E_4_1_3 = 1
+ Init_E_0_2: E_0_0_2 = 0
+ Init_E_0_3: E_0_0_3 = 0
+ Init_E_1_2: E_0_1_2 = 0
+ Init_E_1_3: E_0_1_3 = 0
+ LC_Direct_LB_1_0_2: y_LC_1_0 + y_LC_1_2 + E_1_0_2 - E_2_0_2 <= 1
+ LC_Direct_LB_2_0_3: y_LC_2_0 + y_LC_2_3 + E_2_0_3 - E_3_0_3 <= 1
+ LC_Direct_LB_2_1_2: y_LC_2_1 + y_LC_2_2 + E_2_1_2 - E_3_1_2 <= 1
+ LC_Direct_LB_3_0_3: y_LC_3_0 + y_LC_3_3 + E_3_0_3 - E_4_0_3 <= 1
+ LC_Direct_LB_3_1_2: y_LC_3_1 + y_LC_3_2 + E_3_1_2 - E_4_1_2 <= 1
+ LC_Direct_UB_0_0_3: y_LC_0_0 + y_LC_0_3 - E_0_0_3 + E_1_0_3 <= 1
+ LC_Direct_UB_0_1_2: y_LC_0_1 + y_LC_0_2 - E_0_1_2 + E_1_1_2 <= 1
+ LC_Direct_UB_0_1_3: y_LC_0_1 + y_LC_0_3 - E_0_1_3 + E_1_1_3 <= 1
+ LC_Direct_UB_1_0_3: y_LC_1_0 + y_LC_1_3 - E_1_0_3 + E_2_0_3 <= 1
+ LC_Direct_UB_1_1_2: y_LC_1_1 + y_LC_1_2 - E_1_1_2 + E_2_1_2 <= 1
+ LC_Direct_UB_1_1_3: y_LC_1_1 + y_LC_1_3 - E_1_1_3 + E_2_1_3 <= 1
+ LC_Direct_UB_2_1_3: y_LC_2_1 + y_LC_2_3 - E_2_1_3 + E_3_1_3 <= 1
+ LC_Direct_UB_3_1_3: y_LC_3_1 + y_LC_3_3 - E_3_1_3 + E_4_1_3 <= 1
+ LC_IF_LB_2_0_1_2: - y_LC_2_0 - E_2_0_1 - E_2_0_2 + E_2_1_2 + E_3_1_2
+   >= -2
+ LC_IF_LB_2_2_0_3: - y_LC_2_2 - E_2_0_2 + E_2_0_3 - E_2_2_3 + E_3_0_3
+   >= -2
+ LC_ONLYIF_UB_0_0_1_2: 2 y_LC_0_0 - E_0_0_1 - E_0_0_2 - 2 E_0_1_2
+   + 2 E_1_1_2 <= 2
+ LC_ONLYIF_UB_0_0_1_3: 2 y_LC_0_0 - E_0_0_1 - E_0_0_3 - 2 E_0_1_3
+   + 2 E_1_1_3 <= 2
+ LC_ONLYIF_UB_0_1_0_3: 2 y_LC_0_1 - E_0_0_1 - 2 E_0_0_3 + 2 E_1_0_3
+   - E_0_1_3 <= 2
+ LC_ONLYIF_UB_0_2_0_3: 2 y_LC_0_2 - E_0_0_2 - 2 E_0_0_3 + 2 E_1_0_3
+   - E_0_2_3 <= 2
+ LC_ONLYIF_UB_0_2_1_3: 2 y_LC_0_2 - E_0_1_2 - 2 E_0_1_3 + 2 E_1_1_3
+   - E_0_2_3 <= 2
+ LC_ONLYIF_UB_0_3_1_2: 2 y_LC_0_3 - 2 E_0_1_2 + 2 E_1_1_2 - E_0_1_3
+   - E_0_2_3 <= 2
+ LC_ONLYIF_UB_1_0_1_2: 2 y_LC_1_0 - E_1_0_1 - E_1_0_2 - 2 E_1_1_2
+   + 2 E_2_1_2 <= 2
+ LC_ONLYIF_UB_1_0_1_3: 2 y_LC_1_0 - E_1_0_1 - E_1_0_3 - 2 E_1_1_3
+   + 2 E_2_1_3 <= 2
+ LC_ONLYIF_UB_1_1_0_3: 2 y_LC_1_1 - E_1_0_1 - 2 E_1_0_3 - E_1_1_3
+   + 2 E_2_0_3 <= 2
+ LC_ONLYIF_UB_1_2_0_3: 2 y_LC_1_2 - E_1_0_2 - 2 E_1_0_3 - E_1_2_3
+   + 2 E_2_0_3 <= 2
+ LC_ONLYIF_UB_1_2_1_3: 2 y_LC_1_2 - E_1_1_2 - 2 E_1_1_3 - E_1_2_3
+   + 2 E_2_1_3 <= 2
+ LC_ONLYIF_UB_1_3_1_2: 2 y_LC_1_3 - 2 E_1_1_2 - E_1_1_3 - E_1_2_3
+   + 2 E_2_1_2 <= 2
+ LC_ONLYIF_UB_2_0_1_3: 2 y_LC_2_0 - E_2_0_1 - E_2_0_3 - 2 E_2_1_3
+   + 2 E_3_1_3 <= 2
+ LC_ONLYIF_UB_2_2_1_3: 2 y_LC_2_2 - E_2_1_2 - 2 E_2_1_3 - E_2_2_3
+   + 2 E_3_1_3 <= 2
+ LC_ONLYIF_UB_3_0_1_3: 2 y_LC_3_0 - E_3_0_1 - E_3_0_3 - 2 E_3_1_3
+   + 2 E_4_1_3 <= 2
+ LC_ONLYIF_UB_3_2_1_3: 2 y_LC_3_2 - E_3_1_2 - 2 E_3_1_3 - E_3_2_3
+   + 2 E_4_1_3 <= 2
+ One_Op_0: y_CZ_0_0_0 + y_CZ_0_0_1 + y_CZ_0_0_2 + y_CZ_0_0_3 + y_CZ_0_1_0
+   + y_CZ_0_1_1 + y_CZ_0_1_2 + y_CZ_0_1_3 + y_CZ_0_2_0 + y_CZ_0_2_1
+   + y_CZ_0_2_2 + y_CZ_0_2_3 + y_CZ_0_3_0 + y_CZ_0_3_1 + y_CZ_0_3_2
+   + y_CZ_0_3_3 + y_F_0_0_0 + y_F_0_0_1 + y_F_0_0_2 + y_F_0_0_3 + y_F_0_1_0
+   + y_F_0_1_1 + y_F_0_1_2 + y_F_0_1_3 + y_F_0_2_0 + y_F_0_2_1 + y_F_0_2_2
+   + y_F_0_2_3 + y_F_0_3_0 + y_F_0_3_1 + y_F_0_3_2 + y_F_0_3_3 + y_LC_0_0
+   + y_LC_0_1 + y_LC_0_2 + y_LC_0_3 + y_dummy_0 = 1
+ One_Op_1: y_CZ_1_0_0 + y_CZ_1_0_1 + y_CZ_1_0_2 + y_CZ_1_0_3 + y_CZ_1_1_0
+   + y_CZ_1_1_1 + y_CZ_1_1_2 + y_CZ_1_1_3 + y_CZ_1_2_0 + y_CZ_1_2_1
+   + y_CZ_1_2_2 + y_CZ_1_2_3 + y_CZ_1_3_0 + y_CZ_1_3_1 + y_CZ_1_3_2
+   + y_CZ_1_3_3 + y_F_1_0_0 + y_F_1_0_1 + y_F_1_0_2 + y_F_1_0_3 + y_F_1_1_0
+   + y_F_1_1_1 + y_F_1_1_2 + y_F_1_1_3 + y_F_1_2_0 + y_F_1_2_1 + y_F_1_2_2
+   + y_F_1_2_3 + y_F_1_3_0 + y_F_1_3_1 + y_F_1_3_2 + y_F_1_3_3 + y_LC_1_0
+   + y_LC_1_1 + y_LC_1_2 + y_LC_1_3 + y_dummy_1 = 1
+ One_Op_2: y_CZ_2_0_0 + y_CZ_2_0_1 + y_CZ_2_0_2 + y_CZ_2_0_3 + y_CZ_2_1_0
+   + y_CZ_2_1_1 + y_CZ_2_1_2 + y_CZ_2_1_3 + y_CZ_2_2_0 + y_CZ_2_2_1
+   + y_CZ_2_2_2 + y_CZ_2_2_3 + y_CZ_2_3_0 + y_CZ_2_3_1 + y_CZ_2_3_2
+   + y_CZ_2_3_3 + y_F_2_0_0 + y_F_2_0_1 + y_F_2_0_2 + y_F_2_0_3 + y_F_2_1_0
+   + y_F_2_1_1 + y_F_2_1_2 + y_F_2_1_3 + y_F_2_2_0 + y_F_2_2_1 + y_F_2_2_2
+   + y_F_2_2_3 + y_F_2_3_0 + y_F_2_3_1 + y_F_2_3_2 + y_F_2_3_3 + y_LC_2_0
+   + y_LC_2_1 + y_LC_2_2 + y_LC_2_3 + y_dummy_2 = 1
+ One_Op_3: y_CZ_3_0_0 + y_CZ_3_0_1 + y_CZ_3_0_2 + y_CZ_3_0_3 + y_CZ_3_1_0
+   + y_CZ_3_1_1 + y_CZ_3_1_2 + y_CZ_3_1_3 + y_CZ_3_2_0 + y_CZ_3_2_1
+   + y_CZ_3_2_2 + y_CZ_3_2_3 + y_CZ_3_3_0 + y_CZ_3_3_1 + y_CZ_3_3_2
+   + y_CZ_3_3_3 + y_F_3_0_0 + y_F_3_0_1 + y_F_3_0_2 + y_F_3_0_3 + y_F_3_1_0
+   + y_F_3_1_1 + y_F_3_1_2 + y_F_3_1_3 + y_F_3_2_0 + y_F_3_2_1 + y_F_3_2_2
+   + y_F_3_2_3 + y_F_3_3_0 + y_F_3_3_1 + y_F_3_3_2 + y_F_3_3_3 + y_LC_3_0
+   + y_LC_3_1 + y_LC_3_2 + y_LC_3_3 + y_dummy_3 = 1
+ Parity_CZ_0_0_0: y_CZ_0_0_0 = 0
+ Parity_CZ_0_0_1: y_CZ_0_0_1 = 0
+ Parity_CZ_0_0_3: y_CZ_0_0_3 = 0
+ Parity_CZ_0_1_0: y_CZ_0_1_0 = 0
+ Parity_CZ_0_1_1: y_CZ_0_1_1 = 0
+ Parity_CZ_0_1_2: y_CZ_0_1_2 = 0
+ Parity_CZ_0_2_1: y_CZ_0_2_1 = 0
+ Parity_CZ_0_2_2: y_CZ_0_2_2 = 0
+ Parity_CZ_0_2_3: y_CZ_0_2_3 = 0
+ Parity_CZ_0_3_0: y_CZ_0_3_0 = 0
+ Parity_CZ_0_3_2: y_CZ_0_3_2 = 0
+ Parity_CZ_0_3_3: y_CZ_0_3_3 = 0
+ Parity_CZ_1_0_0: y_CZ_1_0_0 = 0
+ Parity_CZ_1_0_1: y_CZ_1_0_1 = 0
+ Parity_CZ_1_0_3: y_CZ_1_0_3 = 0
+ Parity_CZ_1_1_0: y_CZ_1_1_0 = 0
+ Parity_CZ_1_1_1: y_CZ_1_1_1 = 0
+ Parity_CZ_1_1_2: y_CZ_1_1_2 = 0
+ Parity_CZ_1_2_1: y_CZ_1_2_1 = 0
+ Parity_CZ_1_2_2: y_CZ_1_2_2 = 0
+ Parity_CZ_1_2_3: y_CZ_1_2_3 = 0
+ Parity_CZ_1_3_0: y_CZ_1_3_0 = 0
+ Parity_CZ_1_3_2: y_CZ_1_3_2 = 0
+ Parity_CZ_1_3_3: y_CZ_1_3_3 = 0
+ Parity_CZ_2_0_0: y_CZ_2_0_0 = 0
+ Parity_CZ_2_0_1: y_CZ_2_0_1 = 0
+ Parity_CZ_2_0_3: y_CZ_2_0_3 = 0
+ Parity_CZ_2_1_0: y_CZ_2_1_0 = 0
+ Parity_CZ_2_1_1: y_CZ_2_1_1 = 0
+ Parity_CZ_2_1_2: y_CZ_2_1_2 = 0
+ Parity_CZ_2_2_1: y_CZ_2_2_1 = 0
+ Parity_CZ_2_2_2: y_CZ_2_2_2 = 0
+ Parity_CZ_2_2_3: y_CZ_2_2_3 = 0
+ Parity_CZ_2_3_0: y_CZ_2_3_0 = 0
+ Parity_CZ_2_3_2: y_CZ_2_3_2 = 0
+ Parity_CZ_2_3_3: y_CZ_2_3_3 = 0
+ Parity_CZ_3_0_0: y_CZ_3_0_0 = 0
+ Parity_CZ_3_0_1: y_CZ_3_0_1 = 0
+ Parity_CZ_3_0_3: y_CZ_3_0_3 = 0
+ Parity_CZ_3_1_0: y_CZ_3_1_0 = 0
+ Parity_CZ_3_1_1: y_CZ_3_1_1 = 0
+ Parity_CZ_3_1_2: y_CZ_3_1_2 = 0
+ Parity_CZ_3_2_1: y_CZ_3_2_1 = 0
+ Parity_CZ_3_2_2: y_CZ_3_2_2 = 0
+ Parity_CZ_3_2_3: y_CZ_3_2_3 = 0
+ Parity_CZ_3_3_0: y_CZ_3_3_0 = 0
+ Parity_CZ_3_3_2: y_CZ_3_3_2 = 0
+ Parity_CZ_3_3_3: y_CZ_3_3_3 = 0
+ Parity_F_0_0_0: y_F_0_0_0 = 0
+ Parity_F_0_0_1: y_F_0_0_1 = 0
+ Parity_F_0_0_3: y_F_0_0_3 = 0
+ Parity_F_0_1_0: y_F_0_1_0 = 0
+ Parity_F_0_1_1: y_F_0_1_1 = 0
+ Parity_F_0_1_2: y_F_0_1_2 = 0
+ Parity_F_0_2_1: y_F_0_2_1 = 0
+ Parity_F_0_2_2: y_F_0_2_2 = 0
+ Parity_F_0_2_3: y_F_0_2_3 = 0
+ Parity_F_0_3_0: y_F_0_3_0 = 0
+ Parity_F_0_3_2: y_F_0_3_2 = 0
+ Parity_F_0_3_3: y_F_0_3_3 = 0
+ Parity_F_1_0_0: y_F_1_0_0 = 0
+ Parity_F_1_0_1: y_F_1_0_1 = 0
+ Parity_F_1_0_3: y_F_1_0_3 = 0
+ Parity_F_1_1_0: y_F_1_1_0 = 0
+ Parity_F_1_1_1: y_F_1_1_1 = 0
+ Parity_F_1_1_2: y_F_1_1_2 = 0
+ Parity_F_1_2_1: y_F_1_2_1 = 0
+ Parity_F_1_2_2: y_F_1_2_2 = 0
+ Parity_F_1_2_3: y_F_1_2_3 = 0
+ Parity_F_1_3_0: y_F_1_3_0 = 0
+ Parity_F_1_3_2: y_F_1_3_2 = 0
+ Parity_F_1_3_3: y_F_1_3_3 = 0
+ Parity_F_2_0_0: y_F_2_0_0 = 0
+ Parity_F_2_0_1: y_F_2_0_1 = 0
+ Parity_F_2_0_3: y_F_2_0_3 = 0
+ Parity_F_2_1_0: y_F_2_1_0 = 0
+ Parity_F_2_1_1: y_F_2_1_1 = 0
+ Parity_F_2_1_2: y_F_2_1_2 = 0
+ Parity_F_2_2_1: y_F_2_2_1 = 0
+ Parity_F_2_2_2: y_F_2_2_2 = 0
+ Parity_F_2_2_3: y_F_2_2_3 = 0
+ Parity_F_2_3_0: y_F_2_3_0 = 0
+ Parity_F_2_3_2: y_F_2_3_2 = 0
+ Parity_F_2_3_3: y_F_2_3_3 = 0
+ Parity_F_3_0_0: y_F_3_0_0 = 0
+ Parity_F_3_0_1: y_F_3_0_1 = 0
+ Parity_F_3_0_3: y_F_3_0_3 = 0
+ Parity_F_3_1_0: y_F_3_1_0 = 0
+ Parity_F_3_1_1: y_F_3_1_1 = 0
+ Parity_F_3_1_2: y_F_3_1_2 = 0
+ Parity_F_3_2_1: y_F_3_2_1 = 0
+ Parity_F_3_2_2: y_F_3_2_2 = 0
+ Parity_F_3_2_3: y_F_3_2_3 = 0
+ Parity_F_3_3_0: y_F_3_3_0 = 0
+ Parity_F_3_3_2: y_F_3_3_2 = 0
+ Parity_F_3_3_3: y_F_3_3_3 = 0
+ testing_Parity_CZ_0_0_2: y_CZ_0_0_2 = 0
+ testing_Parity_CZ_0_1_3: y_CZ_0_1_3 = 0
+ testing_Parity_CZ_0_2_0: y_CZ_0_2_0 = 0
+ testing_Parity_CZ_0_3_1: y_CZ_0_3_1 = 0
+ testing_Parity_CZ_1_0_2: y_CZ_1_0_2 = 0
+ testing_Parity_CZ_1_1_3: y_CZ_1_1_3 = 0
+ testing_Parity_CZ_1_2_0: y_CZ_1_2_0 = 0
+ testing_Parity_CZ_1_3_1: y_CZ_1_3_1 = 0
+ testing_Parity_CZ_2_0_2: y_CZ_2_0_2 = 0
+ testing_Parity_CZ_2_1_3: y_CZ_2_1_3 = 0
+ testing_Parity_CZ_2_2_0: y_CZ_2_2_0 = 0
+ testing_Parity_CZ_2_3_1: y_CZ_2_3_1 = 0
+ testing_Parity_CZ_3_0_2: y_CZ_3_0_2 = 0
+ testing_Parity_CZ_3_1_3: y_CZ_3_1_3 = 0
+ testing_Parity_CZ_3_2_0: y_CZ_3_2_0 = 0
+ testing_Parity_CZ_3_3_1: y_CZ_3_3_1 = 0
+ testing_Parity_F_0_0_2: y_F_0_0_2 = 0
+ testing_Parity_F_0_1_3: y_F_0_1_3 = 0
+ testing_Parity_F_0_2_0: y_F_0_2_0 = 0
+ testing_Parity_F_0_3_1: y_F_0_3_1 = 0
+ testing_Parity_F_1_0_2: y_F_1_0_2 = 0
+ testing_Parity_F_1_1_3: y_F_1_1_3 = 0
+ testing_Parity_F_1_2_0: y_F_1_2_0 = 0
+ testing_Parity_F_1_3_1: y_F_1_3_1 = 0
+ testing_Parity_F_2_0_2: y_F_2_0_2 = 0
+ testing_Parity_F_2_1_3: y_F_2_1_3 = 0
+ testing_Parity_F_2_2_0: y_F_2_2_0 = 0
+ testing_Parity_F_2_3_1: y_F_2_3_1 = 0
+ testing_Parity_F_3_0_2: y_F_3_0_2 = 0
+ testing_Parity_F_3_1_3: y_F_3_1_3 = 0
+ testing_Parity_F_3_2_0: y_F_3_2_0 = 0
+ testing_Parity_F_3_3_1: y_F_3_3_1 = 0
+Bounds
+Binaries
+ y_CZ_0_0_0 y_CZ_0_0_1 y_CZ_0_0_2 y_CZ_0_0_3 y_CZ_0_1_0 y_CZ_0_1_1
+ y_CZ_0_1_2 y_CZ_0_1_3 y_CZ_0_2_0 y_CZ_0_2_1 y_CZ_0_2_2 y_CZ_0_2_3
+ y_CZ_0_3_0 y_CZ_0_3_1 y_CZ_0_3_2 y_CZ_0_3_3 y_CZ_1_0_0 y_CZ_1_0_1
+ y_CZ_1_0_2 y_CZ_1_0_3 y_CZ_1_1_0 y_CZ_1_1_1 y_CZ_1_1_2 y_CZ_1_1_3
+ y_CZ_1_2_0 y_CZ_1_2_1 y_CZ_1_2_2 y_CZ_1_2_3 y_CZ_1_3_0 y_CZ_1_3_1
+ y_CZ_1_3_2 y_CZ_1_3_3 y_CZ_2_0_0 y_CZ_2_0_1 y_CZ_2_0_2 y_CZ_2_0_3
+ y_CZ_2_1_0 y_CZ_2_1_1 y_CZ_2_1_2 y_CZ_2_1_3 y_CZ_2_2_0 y_CZ_2_2_1
+ y_CZ_2_2_2 y_CZ_2_2_3 y_CZ_2_3_0 y_CZ_2_3_1 y_CZ_2_3_2 y_CZ_2_3_3
+ y_CZ_3_0_0 y_CZ_3_0_1 y_CZ_3_0_2 y_CZ_3_0_3 y_CZ_3_1_0 y_CZ_3_1_1
+ y_CZ_3_1_2 y_CZ_3_1_3 y_CZ_3_2_0 y_CZ_3_2_1 y_CZ_3_2_2 y_CZ_3_2_3
+ y_CZ_3_3_0 y_CZ_3_3_1 y_CZ_3_3_2 y_CZ_3_3_3 y_F_0_0_0 y_F_0_0_1 y_F_0_0_2
+ y_F_0_0_3 y_F_0_1_0 y_F_0_1_1 y_F_0_1_2 y_F_0_1_3 y_F_0_2_0 y_F_0_2_1
+ y_F_0_2_2 y_F_0_2_3 y_F_0_3_0 y_F_0_3_1 y_F_0_3_2 y_F_0_3_3 y_F_1_0_0
+ y_F_1_0_1 y_F_1_0_2 y_F_1_0_3 y_F_1_1_0 y_F_1_1_1 y_F_1_1_2 y_F_1_1_3
+ y_F_1_2_0 y_F_1_2_1 y_F_1_2_2 y_F_1_2_3 y_F_1_3_0 y_F_1_3_1 y_F_1_3_2
+ y_F_1_3_3 y_F_2_0_0 y_F_2_0_1 y_F_2_0_2 y_F_2_0_3 y_F_2_1_0 y_F_2_1_1
+ y_F_2_1_2 y_F_2_1_3 y_F_2_2_0 y_F_2_2_1 y_F_2_2_2 y_F_2_2_3 y_F_2_3_0
+ y_F_2_3_1 y_F_2_3_2 y_F_2_3_3 y_F_3_0_0 y_F_3_0_1 y_F_3_0_2 y_F_3_0_3
+ y_F_3_1_0 y_F_3_1_1 y_F_3_1_2 y_F_3_1_3 y_F_3_2_0 y_F_3_2_1 y_F_3_2_2
+ y_F_3_2_3 y_F_3_3_0 y_F_3_3_1 y_F_3_3_2 y_F_3_3_3 y_LC_0_0 y_LC_0_1
+ y_LC_0_2 y_LC_0_3 y_LC_1_0 y_LC_1_1 y_LC_1_2 y_LC_1_3 y_LC_2_0 y_LC_2_1
+ y_LC_2_2 y_LC_2_3 y_LC_3_0 y_LC_3_1 y_LC_3_2 y_LC_3_3 y_dummy_0 E_0_0_1
+ E_1_0_1 E_0_0_2 E_1_0_2 E_0_0_3 E_1_0_3 E_0_1_2 E_1_1_2 E_0_1_3 E_1_1_3
+ E_0_2_3 E_1_2_3 y_dummy_1 E_2_0_1 E_2_0_2 E_2_0_3 E_2_1_2 E_2_1_3 E_2_2_3
+ y_dummy_2 E_3_0_1 E_3_0_3 E_3_1_2 E_3_1_3 E_3_2_3 y_dummy_3 E_4_0_3
+ E_4_1_2 E_4_1_3
+End

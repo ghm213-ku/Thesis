@@ -22,6 +22,7 @@ from shortest_distance_utilities import (
 )
 
 
+# @profile
 def add_graph_to_meta(
     meta_graph: nx.Graph, graph_node: nx.Graph, graph_index: dict
 ) -> bool:
@@ -43,6 +44,7 @@ def add_graph_to_meta(
     return True
 
 
+# @profile
 def is_edge_present(
     meta_graph: nx.Graph,
     graph_index: dict,
@@ -62,11 +64,13 @@ def is_edge_present(
         weight: The weight of the edge (default is 0).
         operation: The operation associated with the edge (default is an empty string).
     """
-
-    add_graph_to_meta(meta_graph, graph2, graph_index)
-
-    index1 = get_node_index(graph1, graph_index)
-    index2 = get_node_index(graph2, graph_index)
+    index1, index2 = -1, -1
+    if add_graph_to_meta(meta_graph, graph2, graph_index):
+        index1 = get_node_index(graph1, graph_index)
+        index2 = len(graph_index) - 1  # The newly added graph's index
+    else:
+        index1 = get_node_index(graph1, graph_index)
+        index2 = get_node_index(graph2, graph_index)
 
     assert (
         index1 != -1 and index2 != -1
@@ -82,6 +86,7 @@ def is_edge_present(
     return False  # Edge was not present and has been added
 
 
+# @profile
 def queue_operation(
     meta_graph: nx.Graph,
     graph_index: dict,
@@ -138,6 +143,7 @@ def queue_operation(
             q.put(new_graph, remaining_ops)
 
 
+# @profile
 def queue_two_qubit_operations(
     meta_graph: nx.Graph,
     graph_index: dict,
@@ -176,6 +182,7 @@ def queue_two_qubit_operations(
                             )
 
 
+# @profile
 def create_graph(n: int) -> tuple[nx.Graph, dict]:
     """
     Create the graph consisting of all the paths and nodes for shortest distance trial.
@@ -209,15 +216,16 @@ if __name__ == "__main__":
     source_node = 0
     target_graph = nx.Graph()
     target_graph.add_nodes_from(range(n))
-    target_graph.add_edges_from([(0, 1), (0, 2), (0, 3), (0, 4), (0, 5)])
+    target_graph.add_edges_from(
+        [(0, 1), (0, 2), (2, 3), (2, 4), (2, 5), (2, 6), (2, 7)]
+    )
 
     meta_graph, graph_index = create_graph(n)
 
-    path = nx.shortest_path(
-        meta_graph,
-        source=source_node,
-        target=get_node_index(target_graph, graph_index),
-        weight="weight",
-    )
+    # path = shortest_path(meta_graph, target_graph)
+
+    # print(f"Shortest path: {path}")
+    # print_shortest_path(path)
+    # print(meta_graph.nodes[path[-1]["target"]]["graph"].edges())
 
     visualizer.run_dashboard(meta_graph)
