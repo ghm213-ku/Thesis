@@ -1,7 +1,8 @@
 import networkx as nx
 import matplotlib.pyplot as plt
 from typing import List, Tuple
-import graphstate_opt as gso
+
+# import graphstate_opt as gso
 import random
 
 
@@ -253,6 +254,94 @@ def draw_graph_with_node_labels(G: nx.Graph, title: str = "graph"):
     )
     plt.draw()
     plt.show(block=True)
+
+
+def get_leader_matrix(n: int):
+    L = [[0] * n for _ in range(n)]
+    for i in range(0, n, 2):
+        L[i][i] = 1
+        L[i][i + 1] = 1
+    return L
+
+
+def get_adjacency_matrix(graph):
+    nodes = list(graph.nodes())
+    positions = {node: index for index, node in enumerate(nodes)}
+    matrix = [[0] * len(nodes) for _ in nodes]
+
+    for source, target in graph.edges():
+        source_index = positions[source]
+        target_index = positions[target]
+        if source_index < target_index:
+            matrix[source_index][target_index] = 1
+        else:
+            matrix[target_index][source_index] = 1
+
+    return matrix
+
+
+def get_operations(model):
+    operations = []
+    for v in model.variables():
+        if (
+            v.name.startswith("y_")
+            and v.varValue is not None
+            and v.varValue > 0.5
+            and not ("active" in v.name)  # Exclude active sum variables
+            and not ("dummy" in v.name)  # Exclude dummy variables
+        ):
+            operations.append(v.name)
+    return operations
+
+
+def get_node_deletion_operations(model):
+    operations = []
+    for v in model.variables():
+        if v.name.startswith("d_") and v.varValue is not None and v.varValue < 0.5:
+            operations.append(v.name)
+    return operations
+
+
+def get_graph_from_adjacency_matrix(adj_matrix):
+    G = nx.Graph()
+    n = len(adj_matrix)
+    G.add_nodes_from(range(n))
+    for i in range(n):
+        for j in range(i + 1, n):
+            if adj_matrix[i][j] == 1:
+                G.add_edge(i, j)
+    return G
+
+
+def get_sorted_operations(operations):
+    # Sort operations based on the first number in the operation name
+    return sorted(operations, key=lambda op: int(op.split("_")[2]))
+
+
+def get_graph_from_operations(operations, node_deletion_ops, n, G=None):
+    # Create an empty graph with n nodes
+    if G is None:
+        G = gen_bell_tree(n)
+
+    # Apply operations to the graph
+    for op in operations:
+        parts = op.split("_")
+        op_type = parts[1]
+        node1 = int(parts[3])
+        node2 = int(parts[4]) if len(parts) > 4 else None
+
+        if op_type == "CZ":
+            G = cz_gate_toggle(G, node1, node2)
+        elif op_type == "F":
+            G = f_gate(G, node1, node2)
+        else:
+            G = local_complement(G, node1)
+
+    for op in node_deletion_ops:
+        parts = op.split("_")
+        node = int(parts[1])
+        G.remove_node(node)
+    return G
 
 
 if __name__ == "__main__":

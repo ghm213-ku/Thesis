@@ -313,48 +313,74 @@ def build_model(N, M, E_0, T, L_0):
     # 8. Target Graph Permutation / Isomorphism
     # ==========================================
     # Assumes T is the upper-triangular target matrix parameter
+    K_nodes = len(T)
     n_target = N
 
-    p = pulp.LpVariable.dicts("p", (range(M + 1), range(M + 1)), cat="Binary")
+    # 1. Variables
+    d = pulp.LpVariable.dicts("d", range(M + 1), cat="Binary")
+    Mask = pulp.LpVariable.dicts("Mask", (range(M + 1), range(M + 1)), cat="Binary")
+    p = pulp.LpVariable.dicts("p", (range(M + 1), range(K_nodes)), cat="Binary")
 
-    # Continuous Z >= 0 to linearize E * p
+    # Continuous Z >= 0 to linearize Mask * p
     Z = pulp.LpVariable.dicts(
-        "Z", (range(M + 1), range(M + 1), range(M + 1)), lowBound=0, cat="Continuous"
+        "Z", (range(M + 1), range(M + 1), range(K_nodes)), lowBound=0, cat="Continuous"
     )
 
-    # Permutation matrix rules
-    for j in range(M + 1):
+    # Optional but recommended: Add a penalty to the objective to prevent the solver
+    # from unnecessarily deleting qubits that don't need to be dropped.
+    # prob.objective += pulp.lpSum([(1 - d[i]) * 1.0 for i in range(M + 1)])
+
+    # 2. Final Vertex Deletion Mask
+    for i in range(M + 1):
+        for j in range(i + 1, M + 1):  # Strictly i < j
+            prob += Mask[i][j] <= E[n_target + 1][i][j], f"Mask_UB_E_{i}_{j}"
+            prob += Mask[i][j] <= d[i], f"Mask_UB_di_{i}_{j}"
+            prob += Mask[i][j] <= d[j], f"Mask_UB_dj_{i}_{j}"
+            prob += (
+                Mask[i][j] >= E[n_target + 1][i][j] + d[i] + d[j] - 2,
+                f"Mask_LB_{i}_{j}",
+            )
+
+    # 3. Permutation Mapping (Asymmetric: M physical to K logical)
+    for i in range(M + 1):
+        # A physical node maps to exactly 1 target vertex IF kept. 0 if deleted.
+        prob += (
+            pulp.lpSum([p[i][j] for j in range(K_nodes)]) == d[i],
+            f"Perm_Row_Sum_{i}",
+        )
+
+    for j in range(K_nodes):
+        # Every target vertex must be mapped exactly once.
         prob += pulp.lpSum([p[i][j] for i in range(M + 1)]) == 1, f"Perm_Col_Sum_{j}"
 
+    # 4. Asymmetric McCormick Linearization & Isomorphism Match
     for i in range(M + 1):
-        prob += pulp.lpSum([p[i][j] for j in range(M + 1)]) == 1, f"Perm_Row_Sum_{i}"
-
-    # Linearization & Isomorphism Match
-    for i in range(M + 1):
-        for j in range(M + 1):
+        for j in range(K_nodes):
 
             for k in range(M + 1):
                 if i != k:
                     ik_min, ik_max = min(i, k), max(i, k)
 
-                    # Bounds map safely to the upper-triangular E
+                    # McCormick envelope bounding against the Masked matrix
                     prob += (
-                        Z[i][k][j] <= E[n_target + 1][ik_min][ik_max],
-                        f"Z_Bound_E_{i}_{k}_{j}",
+                        Z[i][k][j] <= Mask[ik_min][ik_max],
+                        f"Z_Bound_Mask_{i}_{k}_{j}",
                     )
-                    prob += Z[i][k][j] <= p[k][j], f"Z_Bound_P_{i}_{k}_{j}"
+                    prob += Z[i][k][j] <= p[k][j], f"Z_Bound_p_{i}_{k}_{j}"
                     prob += (
-                        Z[i][k][j] >= E[n_target + 1][ik_min][ik_max] + p[k][j] - 1,
+                        Z[i][k][j] >= Mask[ik_min][ik_max] + p[k][j] - 1,
                         f"Z_Bound_Base_{i}_{k}_{j}",
                     )
 
-            # Left side: Sum of Z_{i,k,j} for all valid k
+            # Left side: Sum of Z_{i,k,j} over all valid physical nodes k
             lhs = pulp.lpSum([Z[i][k][j] for k in range(M + 1) if k != i])
 
-            # Right side: Target matrix mapping (T is static and upper-triangular)
+            # Right side: Target matrix mapping over logical target indices l
+            # (Assuming T is upper-triangular or symmetric, handling the l < j and l > j sides)
             rhs_1 = pulp.lpSum([p[i][l] * T[l][j] for l in range(j)])
-            rhs_2 = pulp.lpSum([p[i][l] * T[j][l] for l in range(j + 1, M + 1)])
+            rhs_2 = pulp.lpSum([p[i][l] * T[j][l] for l in range(j + 1, K_nodes)])
 
+            # Isomorphism constraint
             prob += lhs == rhs_1 + rhs_2, f"Iso_Match_{i}_{j}"
     return prob
 
@@ -364,26 +390,31 @@ def build_model(N, M, E_0, T, L_0):
 # ==========================================
 if __name__ == "__main__":
     # Mocking small parameters
-    N_val = 6
-    M_val = 3
+    N_val = 3
+    M_val = 5
 
     E_0 = [
-        [0, 1, 0, 0],
-        [0, 0, 0, 0],
-        [0, 0, 0, 1],
-        [0, 0, 0, 0],
+        [0, 1, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 1, 0, 0],
+        [0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 1],
+        [0, 0, 0, 0, 0, 0],
     ]
     L_0 = [
-        [1, 1, 0, 0],
-        [0, 0, 0, 0],
-        [0, 0, 1, 1],
-        [0, 0, 0, 0],
+        [1, 1, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0],
+        [0, 0, 1, 1, 0, 0],
+        [0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 1, 1],
+        [0, 0, 0, 0, 0, 0],
     ]
     T = [
-        [0, 1, 0, 0],
-        [0, 0, 1, 0],
-        [0, 0, 0, 1],
-        [0, 0, 0, 0],
+        [0, 1, 0, 0, 0],
+        [0, 0, 1, 0, 0],
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 1],
+        [0, 0, 0, 0, 0],
     ]
 
     # E_0 = [[0, 1, 0, 0], [0, 0, 0, 0], [0, 0, 0, 1], [0, 0, 0, 0]]
@@ -463,3 +494,8 @@ if __name__ == "__main__":
             and not ("active" in v.name)  # Exclude active sum variables
         ):
             print(f"{v.name} = 1.0")
+
+    for v in model.variables():
+        # Using > 0.5 to safely check binary 1 against floating point inaccuracies
+        if v.name.startswith("d_") and v.varValue is not None and v.varValue < 0.5:
+            print(f"{v.name} = 0.0")

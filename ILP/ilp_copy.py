@@ -93,21 +93,11 @@ def build_model(N, M, E_0, E_N_plus_1, L_0):
         # Parity constraints
         for i in range(M + 1):
             for j in range(M + 1):
-                # prob += (
-                #     y_F[n][i][j] == 0,
-                #     f"testing Parity_F_{n}_{i}_{j}",
-                # )  # TESTING: Removed F possiblity
-                # prob += (
-                #     y_CZ[n][i][j] == 0,
-                #     f"testing Parity_CZ_{n}_{i}_{j}",
-                # )  # TESTING: Removed F possiblity
-                if (
-                    i % 2 != j % 2 or i == j
-                ):  # i and j must be of different parity and not equal
+                if i % 2 != j % 2:  # i != j (mod 2)
                     prob += y_CZ[n][i][j] == 0, f"Parity_CZ_{n}_{i}_{j}"
                     prob += y_F[n][i][j] == 0, f"Parity_F_{n}_{i}_{j}"
 
-    # DSU & E-Matrix Zeros (Applies to all timesteps)
+    # Structural Matrix Zeros & DSU Properties (Applies to all timesteps)
     for n in range(N + 2):
         for j in range(M + 1):
             # Column sum = 1
@@ -118,11 +108,25 @@ def build_model(N, M, E_0, E_N_plus_1, L_0):
 
         for i in range(M + 1):
             for j in range(M + 1):
+                # Diagonal condition
                 prob += L[n][i][j] <= L[n][i][i], f"DSU_Diag_{n}_{i}_{j}"
 
             # E_n[i][j] = 0 for i >= j
             for j in range(i + 1):
                 prob += E[n][i][j] == 0, f"E_Zero_Lower_{n}_{i}_{j}"
+
+        # Edge Transitivity (If an edge exists, nodes share a leader)
+        for x in range(M + 1):
+            for y in range(M + 1):
+                for z in range(y + 1, M + 1):  # y < z
+                    prob += (
+                        L[n][x][y] - L[n][x][z] <= 1 - E[n][y][z],
+                        f"Edge_Trans_UB_{n}_{x}_{y}_{z}",
+                    )
+                    prob += (
+                        L[n][x][z] - L[n][x][y] <= 1 - E[n][y][z],
+                        f"Edge_Trans_LB_{n}_{x}_{y}_{z}",
+                    )
 
     # ==========================================
     # 5. LC Operation
@@ -162,7 +166,7 @@ def build_model(N, M, E_0, E_N_plus_1, L_0):
 
             for j1 in range(M + 1):
                 for j2 in range(j1 + 1, M + 1):
-                    if i != j1 and i != j2 and j1 != j2:  # i != j1 != j2
+                    if i != j1 and i != j2:  # i != j1 != j2
 
                         e_1 = E[n][min(i, j1)][max(i, j1)]
                         e_2 = E[n][min(i, j2)][max(i, j2)]
@@ -202,6 +206,21 @@ def build_model(N, M, E_0, E_N_plus_1, L_0):
             f"Def_F_Active_{n}",
         )
 
+        # Conservation of Leaders (One leader dies per CZ/F)
+        prob += (
+            pulp.lpSum([L[n][x][x] - L[n + 1][x][x] for x in range(M + 1)])
+            == y_CZ_active[n] + y_F_active[n],
+            f"Leader_Destruction_{n}",
+        )
+
+        # DSU Monotonicity
+        for x in range(M + 1):
+            for y in range(M + 1):
+                prob += (
+                    L[n][x][y] - L[n + 1][x][y] <= L[n][x][x] - L[n + 1][x][x],
+                    f"DSU_Mono_{n}_{x}_{y}",
+                )
+
         # E-Matrix CZ/F Global Inertia
         for a in range(M + 1):
             for b in range(a + 1, M + 1):
@@ -222,69 +241,21 @@ def build_model(N, M, E_0, E_N_plus_1, L_0):
                     f"Global_E_LB_{n}_{a}_{b}",
                 )
 
-        # L-Matrix Bounds and E-Matrix Base for CZ/F
+        # E-Matrix Base & Component Logic for CZ/F
         for i in range(M + 1):
             for j in range(M + 1):
 
-                # y_CZ + y_F <= 2 - L[x][j] - L[x][i] (Applies to all i,j)
+                # Prevent CZ/F gates on nodes already in the same component
                 for x in range(M + 1):
                     prob += (
                         y_CZ[n][i][j] + y_F[n][i][j] <= 2 - L[n][x][j] - L[n][x][i],
                         f"CZ_F_Limit_{n}_{i}_{j}_{x}",
                     )
 
-                for x in range(M + 1):
-                    for y in range(M + 1):
-
-                        rhs_2x = (
-                            L[n][x][j]
-                            + L[n][x][y]
-                            + 2 * (1 - y_CZ[n][i][j] - y_F[n][i][j])
-                        )
-                        prob += (
-                            2 * (L[n][x][y] - L[n + 1][x][y]) <= rhs_2x,
-                            f"L_Diff_LB_{n}_{i}_{j}_{x}_{y}",
-                        )
-
-                        for z in range(M + 1):
-                            prob += (
-                                y_CZ[n][i][j]
-                                + y_F[n][i][j]
-                                + L[n][x][j]
-                                + L[n][x][y]
-                                + L[n][z][i]
-                                - L[n + 1][z][y]
-                                <= 3,
-                                f"CZ_F_L1_{n}_{i}_{j}_{x}_{y}_{z}",
-                            )
-                            prob += (
-                                y_CZ[n][i][j]
-                                + y_F[n][i][j]
-                                + L[n][x][j]
-                                + L[n][x][y]
-                                + L[n][z][i]
-                                + L[n + 1][x][y]
-                                <= 4,
-                                f"CZ_F_L2_{n}_{i}_{j}_{x}_{y}_{z}",
-                            )
-
-                            rhs_3x = (
-                                L[n][x][i]
-                                + L[n][z][j]
-                                + L[n][z][y]
-                                + 3 * (1 - y_CZ[n][i][j] - y_F[n][i][j])
-                                + 3 * (1 - L[n][z][j])
-                            )
-                            prob += (
-                                3 * (L[n + 1][x][y] - L[n][x][y]) <= rhs_3x,
-                                f"L_Diff_UB_{n}_{i}_{j}_{x}_{y}_{z}",
-                            )
-
-                # Equations specifically for j >= i
-                if j > i:
+                # Base Edge Formation
+                if i != j:
                     prob += (
-                        E[n + 1][i][j]
-                        >= y_CZ[n][i][j] + y_F[n][i][j] + y_CZ[n][j][i] + y_F[n][j][i],
+                        E[n + 1][min(i, j)][max(i, j)] >= y_CZ[n][i][j] + y_F[n][i][j],
                         f"E_CZ_F_Base_{n}_{i}_{j}",
                     )
 
@@ -316,8 +287,9 @@ def build_model(N, M, E_0, E_N_plus_1, L_0):
                                 f"F_Ek2_{n}_{i}_{j}_{k}",
                             )
 
-                            # ONLY IF logic (Upper Ceilings)
+                            # ONLY IF logic
                             rhs_f = y_F[n][i][j] + e_jk_n + 2 * (1 - y_F[n][i][j])
+
                             prob += (
                                 2 * (e_ik_n1 - e_ik_n) <= rhs_f,
                                 f"F_OnlyIf_UB_{n}_{i}_{j}_{k}",
@@ -327,90 +299,115 @@ def build_model(N, M, E_0, E_N_plus_1, L_0):
                                 f"F_OnlyIf_LB_{n}_{i}_{j}_{k}",
                             )
 
-                            # MISSING ANTI-LEAK BOUNDS (Lower Floors)
+                            # ANTI-LEAK logic
                             prob += (
                                 e_ik_n - e_ik_n1 <= 1 - y_F[n][i][j],
-                                f"F_No_Disappear_{n}_{i}_{j}_{k}",
+                                f"F_AntiLeak_1_{n}_{i}_{j}_{k}",
                             )
                             prob += (
                                 e_jk_n1 - e_jk_n <= 1 - y_F[n][i][j],
-                                f"F_No_Spawn_{n}_{i}_{j}_{k}",
+                                f"F_AntiLeak_2_{n}_{i}_{j}_{k}",
                             )
 
+    # ==========================================
+    # 8. Target Graph Permutation / Isomorphism
+    # ==========================================
+    # Assumes T is the upper-triangular target matrix parameter
+    # n_target = N
+
+    # p = pulp.LpVariable.dicts("p", (range(M + 1), range(M + 1)), cat="Binary")
+
+    # # Continuous Z >= 0 to linearize E * p
+    # Z = pulp.LpVariable.dicts(
+    #     "Z", (range(M + 1), range(M + 1), range(M + 1)), lowBound=0, cat="Continuous"
+    # )
+
+    # # Permutation matrix rules
+    # for j in range(M + 1):
+    #     prob += pulp.lpSum([p[i][j] for i in range(M + 1)]) == 1, f"Perm_Col_Sum_{j}"
+
+    # for i in range(M + 1):
+    #     prob += pulp.lpSum([p[i][j] for j in range(M + 1)]) == 1, f"Perm_Row_Sum_{i}"
+
+    # # Linearization & Isomorphism Match
+    # for i in range(M + 1):
+    #     for j in range(M + 1):
+
+    #         for k in range(M + 1):
+    #             if i != k:
+    #                 ik_min, ik_max = min(i, k), max(i, k)
+
+    #                 # Bounds map safely to the upper-triangular E
+    #                 prob += (
+    #                     Z[i][k][j] <= E[n_target + 1][ik_min][ik_max],
+    #                     f"Z_Bound_E_{i}_{k}_{j}",
+    #                 )
+    #                 prob += Z[i][k][j] <= p[k][j], f"Z_Bound_P_{i}_{k}_{j}"
+    #                 prob += (
+    #                     Z[i][k][j] >= E[n_target + 1][ik_min][ik_max] + p[k][j] - 1,
+    #                     f"Z_Bound_Base_{i}_{k}_{j}",
+    #                 )
+
+    #         # Left side: Sum of Z_{i,k,j} for all valid k
+    #         lhs = pulp.lpSum([Z[i][k][j] for k in range(M + 1) if k != i])
+
+    #         # Right side: Target matrix mapping (T is static and upper-triangular)
+    #         rhs_1 = pulp.lpSum([p[i][l] * T[l][j] for l in range(j)])
+    #         rhs_2 = pulp.lpSum([p[i][l] * T[j][l] for l in range(j + 1, M + 1)])
+
+    #         prob += lhs == rhs_1 + rhs_2, f"Iso_Match_{i}_{j}"
     return prob
 
 
 # ==========================================
-# Example usage to verify construction
+# Test Execution Block
 # ==========================================
 if __name__ == "__main__":
     # Mocking small parameters
-    N_val = 10
-    M_val = 7
+    N_val = 6
+    M_val = 3
 
-    # Creating empty zero matrices for the parameters
-    # mock_E0 = [[0 for _ in range(M_val + 1)] for _ in range(M_val + 1)]
     E_0 = [
-        [0, 1, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 1, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 1, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 1],
-        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 1, 0, 0],
+        [0, 0, 0, 0],
+        [0, 0, 0, 1],
+        [0, 0, 0, 0],
     ]
     L_0 = [
-        [1, 1, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 1, 1, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 1, 1, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 1, 1],
-        [0, 0, 0, 0, 0, 0, 0, 0],
+        [1, 1, 0, 0],
+        [0, 0, 0, 0],
+        [0, 0, 1, 1],
+        [0, 0, 0, 0],
     ]
-    E_N = [
-        [0, 0, 0, 0, 0, 0, 0, 1],
-        [0, 0, 0, 0, 0, 0, 0, 1],
-        [0, 0, 0, 0, 0, 1, 0, 0],
-        [0, 0, 0, 0, 0, 1, 0, 0],
-        [0, 0, 0, 0, 0, 1, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 1],
-        [0, 0, 0, 0, 0, 0, 0, 1],
-        [0, 0, 0, 0, 0, 0, 0, 0],
+    T = [
+        [0, 1, 0, 0],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1],
+        [0, 0, 0, 0],
     ]
-    # mock_L0 = [[0 for _ in range(M_val + 1)] for _ in range(M_val + 1)]
-    # mock_EN = [[0 for _ in range(M_val + 1)] for _ in range(M_val + 1)]
 
-    # For a real run, populate mock_E0, mock_L0, and mock_EN accurately.
-    # Set L_0 to diagonal identity just for valid mapping
-    # for i in range(M_val + 1):
-    #     mock_L0[i][i] = 1
+    # E_0 = [[0, 1, 0, 0], [0, 0, 0, 0], [0, 0, 0, 1], [0, 0, 0, 0]]
+    # L_0 = [[1, 1, 0, 0], [0, 0, 0, 0], [0, 0, 1, 1], [0, 0, 0, 0]]
+    # E_N = [[0, 1, 1, 0], [0, 0, 0, 0], [0, 0, 0, 1], [0, 0, 0, 0]]
+    model = build_model(N_val, M_val, E_0, T, L_0)
 
-    model = build_model(N_val, M_val, E_0, E_N, L_0)
-
-    # 1. Write the model to a file
     model.writeLP("quantum_model.lp")
 
-    # 2. Load that file directly into Gurobi's native engine
     gurobi_model = gp.read("quantum_model.lp")
 
-    # 3. Tell Gurobi to try solving it
-    gurobi_model.optimize()
+    # gurobi_model.optimize()
 
-    # 4. If it crashes, force Gurobi to isolate the contradictory constraints
-    if gurobi_model.status == GRB.INFEASIBLE:
-        print("\nModel is Infeasible! Computing IIS...")
+    # if gurobi_model.status == GRB.INFEASIBLE:
+    #     print("\nModel is Infeasible! Computing IIS...")
 
-        # This isolates the exact equations causing the paradox
-        gurobi_model.computeIIS()
+    #     # This isolates the exact equations causing the paradox
+    #     gurobi_model.computeIIS()
 
-        # Write the contradictory equations to a new text file
-        gurobi_model.write("paradox_report.ilp")
-        print(
-            "\nSUCCESS: Open 'paradox_report.ilp' to see the exact constraints that contradict each other."
-        )
+    #     # Write the contradictory equations to a new text file
+    #     gurobi_model.write("paradox_report.ilp")
+    #     print(
+    #         "\nSUCCESS: Open 'paradox_report.ilp' to see the exact constraints that contradict each other."
+    #     )
 
     # Solve (Use your preferred solver here: pulp.GUROBI(), pulp.CPLEX_CMD(), etc.)
     # Writes every constraint, variable bound, and objective to a text file
@@ -459,5 +456,10 @@ if __name__ == "__main__":
     print("=" * 30)
     for v in model.variables():
         # Using > 0.5 to safely check binary 1 against floating point inaccuracies
-        if v.name.startswith("y_") and v.varValue is not None and v.varValue > 0.5:
+        if (
+            v.name.startswith("y_")
+            and v.varValue is not None
+            and v.varValue > 0.5
+            and not ("active" in v.name)  # Exclude active sum variables
+        ):
             print(f"{v.name} = 1.0")
