@@ -297,7 +297,7 @@ def get_operations(model):
 def get_node_deletion_operations(model):
     operations = []
     for v in model.variables():
-        if v.name.startswith("d_") and v.varValue is not None and v.varValue < 0.5:
+        if v.name.startswith("c_") and v.varValue is not None and v.varValue < 0.5:
             operations.append(v.name)
     return operations
 

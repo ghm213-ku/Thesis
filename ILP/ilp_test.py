@@ -18,7 +18,7 @@ import graph_utilities
 
 ilps = [ilp, ilp_copy, ilp_latest]
 
-current_ilp = ilp_latest
+current_ilp = ilp_copy
 
 
 def test_ilp_accessible():
@@ -33,7 +33,7 @@ def test_ilp_accessible():
         L = graph_utilities.get_leader_matrix(n)
         E_n = graph_utilities.get_adjacency_matrix(graph)
 
-        model = current_ilp.build_model(iterations, n - 1, E_0, E_n, L)
+        model = current_ilp.ILPModel(iterations, n - 1, E_0, L, T=E_n).build()
 
         print(
             f"ILP model has {model.numVariables()} variables and {model.numConstraints()} constraints."
@@ -92,7 +92,7 @@ def test_ilp_LC():
     ]
 
     # Apply the ILP to find the sequence of operations
-    model = current_ilp.build_model(iterations, n - 1, E_0, T, L_0)
+    model = current_ilp.ILPModel(iterations, n - 1, E_0, L_0, T=T).build()
 
     model.solve(pulp.GUROBI(msg=0))
 
@@ -146,9 +146,37 @@ def test_ilp_node_deletion():
     ]
 
     # Apply the ILP to find the sequence of operations
-    model = current_ilp.build_model(iterations, n - 1, E_0, T, L_0)
+    model = current_ilp.ILPModel(iterations, n - 1, E_0, L_0, T).build()
 
     model.solve(pulp.GUROBI(msg=0))
+
+    print("\n" + "=" * 30)
+    print("      E MATRIX TRACKER")
+    print("=" * 30)
+    for N in range(iterations + 2):
+        print(f"\n--- Time Step n={N} ---")
+        for i in range(n):
+            row = []
+            for j in range(n):
+                # Safely grab the variable from the PuLP dictionary
+                var = model.variablesDict().get(f"E_{N}_{i}_{j}")
+                val = int(var.varValue) if var and var.varValue is not None else 0
+                row.append(val)
+            print(row)
+
+    for v in model.variables():
+        # Using > 0.5 to safely check binary 1 against floating point inaccuracies
+        if (
+            v.name.startswith("y_")
+            and v.varValue is not None
+            and v.varValue > 0.5
+            and not ("active" in v.name)  # Exclude active sum variables
+        ):
+            print(f"{v.name} = 1.0")
+    for v in model.variables():
+        # Using > 0.5 to safely check binary 1 against floating point inaccuracies
+        if v.name.startswith("c_") and v.varValue is not None and v.varValue < 0.5:
+            print(f"{v.name} = 0.0")
 
     if model.status == pulp.LpStatusOptimal:
         operations = graph_utilities.get_operations(model)
@@ -201,7 +229,7 @@ def test_ilp_LC_node_deletion():
     ]
 
     # Apply the ILP to find the sequence of operations
-    model = current_ilp.build_model(iterations, n - 1, E_0, T, L_0)
+    model = current_ilp.ILPModel(iterations, n - 1, E_0, L_0, T=T).build()
 
     model.solve(pulp.GUROBI(msg=0))
 
