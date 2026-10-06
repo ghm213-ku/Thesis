@@ -3,386 +3,570 @@ import gurobipy as gp
 from gurobipy import GRB
 
 
-def build_model(N, M, E_0, T, L_0):
-    prob = pulp.LpProblem("Quantum_Circuit_Routing", pulp.LpMinimize)
+class ILPModel:
+    def __init__(self, N, M, E_0, L_0, T):
+        """
+        N: Number of timeline operations (max index). Timeline goes from 0 to N.
+        M: Max index of physical qubits. Qubits are 0 to M.
+        E_0: Initial adjacency matrix (M+1 x M+1).
+        L_0: Initial DSU leader matrix (M+1 x M+1).
+        T: Logical target adjacency matrix (K x K).
+        """
+        self.N = N
+        self.M = M
+        self.K_nodes = len(T)
+        self.E_0 = E_0
+        self.L_0 = L_0
+        self.T = T
 
-    # ==========================================
-    # 1. Variables
-    # ==========================================
-    y_dummy = pulp.LpVariable.dicts("y_dummy", range(N + 1), cat="Binary")
-    y_LC = pulp.LpVariable.dicts("y_LC", (range(N + 1), range(M + 1)), cat="Binary")
-    y_CZ = pulp.LpVariable.dicts(
-        "y_CZ", (range(N + 1), range(M + 1), range(M + 1)), cat="Binary"
-    )
-    y_F = pulp.LpVariable.dicts(
-        "y_F", (range(N + 1), range(M + 1), range(M + 1)), cat="Binary"
-    )
+        # The final state of the graph after N operations is at N+1
+        self.n_target = self.N + 1
 
-    y_LC_active = pulp.LpVariable.dicts("y_LC_active", range(N + 1), cat="Binary")
-    y_CZ_active = pulp.LpVariable.dicts("y_CZ_active", range(N + 1), cat="Binary")
-    y_F_active = pulp.LpVariable.dicts("y_F_active", range(N + 1), cat="Binary")
+        self.prob = pulp.LpProblem("Quantum_Circuit_Routing", pulp.LpMinimize)
 
-    E = pulp.LpVariable.dicts(
-        "E", (range(N + 2), range(M + 1), range(M + 1)), cat="Binary"
-    )
-    L = pulp.LpVariable.dicts(
-        "L", (range(N + 2), range(M + 1), range(M + 1)), cat="Binary"
-    )
+    def build(self, isomorphism=True):
+        """Master build method. Acts as the table of contents for the model."""
+        self._define_variables()
+        self._define_objective()
 
-    # ==========================================
-    # 2. Objective Function
-    # ==========================================
-    prob += (
-        pulp.lpSum(
-            [
-                3.17 * y_CZ[n][i][j] + 1.0 * y_F[n][i][j]
-                for n in range(N + 1)
-                for i in range(M + 1)
-                for j in range(M + 1)
-            ]
+        self._add_boundary_conditions()
+        self._add_global_operations()
+        self._add_lc_constraints()
+        self._add_cz_and_f_shared_logic()
+        self._add_f_edge_logic()
+        if isomorphism:
+            self._add_isomorphism_and_deletion()
+        else:
+            self._add_target_graph()
+        return self.prob
+
+    def _define_variables(self):
+        # 1. Timeline Operation Variables
+        self.y_dummy = pulp.LpVariable.dicts("y_dummy", range(self.N + 1), cat="Binary")
+        self.y_LC = pulp.LpVariable.dicts(
+            "y_LC", (range(self.N + 1), range(self.M + 1)), cat="Binary"
         )
-        + pulp.lpSum([0.01 * y_LC[n][i] for n in range(N + 1) for i in range(M + 1)]),
-        "Minimize_Cost",
-    )
+        self.y_CZ = pulp.LpVariable.dicts(
+            "y_CZ",
+            (range(self.N + 1), range(self.M + 1), range(self.M + 1)),
+            cat="Binary",
+        )
+        self.y_F = pulp.LpVariable.dicts(
+            "y_F",
+            (range(self.N + 1), range(self.M + 1), range(self.M + 1)),
+            cat="Binary",
+        )
 
-    # ==========================================
-    # 3. Boundary Conditions
-    # ==========================================
-    for i in range(M + 1):
-        for j in range(M + 1):
-            prob += E[0][i][j] == E_0[i][j], f"Init_E_{i}_{j}"
-            prob += L[0][i][j] == L_0[i][j], f"Init_L_{i}_{j}"
-            # prob += E[N + 1][i][j] == E_N_plus_1[i][j], f"Final_E_{i}_{j}"
+        self.y_CZ_active = pulp.LpVariable.dicts(
+            "y_CZ_active", range(self.N + 1), cat="Binary"
+        )
+        self.y_F_active = pulp.LpVariable.dicts(
+            "y_F_active", range(self.N + 1), cat="Binary"
+        )
 
-    # ==========================================
-    # 4. Global Operations & Setup
-    # ==========================================
-    for n in range(N + 1):
+        # 2. State Matrices
+        self.E = pulp.LpVariable.dicts(
+            "E", (range(self.N + 2), range(self.M + 1), range(self.M + 1)), cat="Binary"
+        )
+        self.L = pulp.LpVariable.dicts(
+            "L", (range(self.N + 2), range(self.M + 1), range(self.M + 1)), cat="Binary"
+        )
 
-        # Operation Sum = 1
-        prob += (
-            y_dummy[n]
-            + pulp.lpSum([y_LC[n][i] for i in range(M + 1)])
-            + pulp.lpSum(
+        # 3. Vertex Deletion & Isomorphism Variables
+        self.c = pulp.LpVariable.dicts("c", range(self.M + 1), cat="Binary")
+        self.Mask = pulp.LpVariable.dicts(
+            "Mask", (range(self.M + 1), range(self.M + 1)), cat="Binary"
+        )
+        self.p = pulp.LpVariable.dicts(
+            "p", (range(self.M + 1), range(self.K_nodes)), cat="Binary"
+        )
+
+        # Continuous Z bounds for McCormick envelope
+        self.Z = pulp.LpVariable.dicts(
+            "Z",
+            (range(self.M + 1), range(self.M + 1), range(self.K_nodes)),
+            lowBound=0,
+            cat="Continuous",
+        )
+
+        # Continuous auxiliary variables for LC McCormick envelopes
+        # Indexed by [n][i][j1][j2]
+        self.l_aux = pulp.LpVariable.dicts(
+            "l_aux",
+            (
+                range(self.N + 1),
+                range(self.M + 1),
+                range(self.M + 1),
+                range(self.M + 1),
+            ),
+            lowBound=0,
+            cat="Continuous",
+        )
+
+        self.z_aux = pulp.LpVariable.dicts(
+            "z_aux",
+            (
+                range(self.N + 1),
+                range(self.M + 1),
+                range(self.M + 1),
+                range(self.M + 1),
+            ),
+            lowBound=0,
+            cat="Continuous",
+        )
+
+        self.f_aux = pulp.LpVariable.dicts(
+            "f_aux",
+            (
+                range(self.N + 1),
+                range(self.M + 1),
+                range(self.M + 1),
+                range(self.M + 1),
+            ),
+            lowBound=0,
+            cat="Continuous",
+        )
+
+    def _define_objective(self):
+        self.prob += (
+            pulp.lpSum(
                 [
-                    y_CZ[n][i][j] + y_F[n][i][j]
-                    for i in range(M + 1)
-                    for j in range(M + 1)
+                    3.17 * self.y_CZ[n][i][j] + 1.0 * self.y_F[n][i][j]
+                    for n in range(self.N + 1)
+                    for i in range(self.M + 1)
+                    for j in range(self.M + 1)
                 ]
             )
-            == 1,
-            f"One_Op_{n}",
+            + pulp.lpSum(
+                [
+                    0.01 * self.y_LC[n][i]
+                    for n in range(self.N + 1)
+                    for i in range(self.M + 1)
+                ]
+            ),
+            "Minimize_Cost",
         )
 
-        # Dummy Monotonicity
-        if n < N:
-            prob += y_dummy[n + 1] >= y_dummy[n], f"Dummy_Mono_{n}"
-
-        # Dummy E-Matrix Inertia
-        for i in range(M + 1):
-            for j in range(i, M + 1):
-                prob += (
-                    E[n + 1][i][j] - E[n][i][j] <= 1 - y_dummy[n],
-                    f"Dummy_E_UB_{n}_{i}_{j}",
-                )
-                prob += (
-                    E[n][i][j] - E[n + 1][i][j] <= 1 - y_dummy[n],
-                    f"Dummy_E_LB_{n}_{i}_{j}",
+    def _add_target_graph(self):
+        # 1. Enforce the target graph at step N+1
+        for i in range(self.K_nodes):
+            for j in range(i + 1, self.K_nodes):  # strictly upper triangular
+                self.prob += (
+                    self.E[self.n_target][i][j] == self.T[i][j],
+                    f"Target_Edge_{i}_{j}",
                 )
 
-        # Parity constraints
-        for i in range(M + 1):
-            for j in range(M + 1):
-                if i % 2 != j % 2:  # i != j (mod 2)
-                    prob += y_CZ[n][i][j] == 0, f"Parity_CZ_{n}_{i}_{j}"
-                    prob += y_F[n][i][j] == 0, f"Parity_F_{n}_{i}_{j}"
+    def _add_boundary_conditions(self):
+        for i in range(self.M + 1):
+            for j in range(self.M + 1):
+                self.prob += self.E[0][i][j] == self.E_0[i][j], f"Init_E_{i}_{j}"
+                self.prob += self.L[0][i][j] == self.L_0[i][j], f"Init_L_{i}_{j}"
 
-    # Structural Matrix Zeros & DSU Properties (Applies to all timesteps)
-    for n in range(N + 2):
-        for j in range(M + 1):
-            # Column sum = 1
-            prob += (
-                pulp.lpSum([L[n][i][j] for i in range(M + 1)]) == 1,
-                f"DSU_Col_Sum_{n}_{j}",
-            )
+        # IMPORTANT: E[N+1] == target is explicitly OMITTED here to let the
+        # isomorphism block handle the dynamic mapping dynamically.
 
-        for i in range(M + 1):
-            for j in range(M + 1):
-                # Diagonal condition
-                prob += L[n][i][j] <= L[n][i][i], f"DSU_Diag_{n}_{i}_{j}"
+    def _add_global_operations(self):
+        for n in range(self.N + 1):
 
-            # E_n[i][j] = 0 for i >= j
-            for j in range(i + 1):
-                prob += E[n][i][j] == 0, f"E_Zero_Lower_{n}_{i}_{j}"
-
-        # Edge Transitivity (If an edge exists, nodes share a leader)
-        for x in range(M + 1):
-            for y in range(M + 1):
-                for z in range(y + 1, M + 1):  # y < z
-                    prob += (
-                        L[n][x][y] - L[n][x][z] <= 1 - E[n][y][z],
-                        f"Edge_Trans_UB_{n}_{x}_{y}_{z}",
-                    )
-                    prob += (
-                        L[n][x][z] - L[n][x][y] <= 1 - E[n][y][z],
-                        f"Edge_Trans_LB_{n}_{x}_{y}_{z}",
-                    )
-
-    # ==========================================
-    # 5. LC Operation
-    # ==========================================
-    for n in range(N + 1):
-
-        # LC Active definition
-        prob += (
-            y_LC_active[n] == pulp.lpSum([y_LC[n][i] for i in range(M + 1)]),
-            f"Def_LC_Active_{n}",
-        )
-
-        # LC/Dummy L-Matrix Inertia
-        for i in range(M + 1):
-            for j in range(M + 1):
-                prob += (
-                    L[n + 1][i][j] - L[n][i][j] <= 1 - y_LC_active[n] - y_dummy[n],
-                    f"LC_Dum_L_UB_{n}_{i}_{j}",
-                )
-                prob += (
-                    L[n][i][j] - L[n + 1][i][j] <= 1 - y_LC_active[n] - y_dummy[n],
-                    f"LC_Dum_L_LB_{n}_{i}_{j}",
-                )
-
-        for i in range(M + 1):
-
-            # Direct Edge Inertia (for all i, j >= i)
-            for j in range(i + 1, M + 1):
-                prob += (
-                    E[n + 1][i][j] - E[n][i][j] <= 1 - y_LC[n][i] - y_LC[n][j],
-                    f"LC_Direct_UB_{n}_{i}_{j}",
-                )
-                prob += (
-                    E[n][i][j] - E[n + 1][i][j] <= 1 - y_LC[n][i] - y_LC[n][j],
-                    f"LC_Direct_LB_{n}_{i}_{j}",
-                )
-
-            for j1 in range(M + 1):
-                for j2 in range(j1 + 1, M + 1):
-                    if i != j1 and i != j2:  # i != j1 != j2
-
-                        e_1 = E[n][min(i, j1)][max(i, j1)]
-                        e_2 = E[n][min(i, j2)][max(i, j2)]
-
-                        # IF logic
-                        lhs_if = E[n + 1][j1][j2] + E[n][j1][j2] - 1
-                        rhs_if = 3 - y_LC[n][i] - e_1 - e_2
-
-                        prob += lhs_if <= rhs_if, f"LC_IF_UB_{n}_{i}_{j1}_{j2}"
-                        prob += lhs_if >= -rhs_if, f"LC_IF_LB_{n}_{i}_{j1}_{j2}"
-
-                        # ONLY IF logic
-                        rhs_only = e_1 + e_2 + 2 * (1 - y_LC[n][i])
-                        prob += (
-                            2 * (E[n + 1][j1][j2] - E[n][j1][j2]) <= rhs_only,
-                            f"LC_ONLYIF_UB_{n}_{i}_{j1}_{j2}",
-                        )
-                        prob += (
-                            2 * (E[n][j1][j2] - E[n + 1][j1][j2]) <= rhs_only,
-                            f"LC_ONLYIF_LB_{n}_{i}_{j1}_{j2}",
-                        )
-
-    # ==========================================
-    # 6. CZ and Common Operation Logic
-    # ==========================================
-    for n in range(N + 1):
-
-        # Active sums for CZ and F
-        prob += (
-            y_CZ_active[n]
-            == pulp.lpSum([y_CZ[n][a][b] for a in range(M + 1) for b in range(M + 1)]),
-            f"Def_CZ_Active_{n}",
-        )
-        prob += (
-            y_F_active[n]
-            == pulp.lpSum([y_F[n][a][b] for a in range(M + 1) for b in range(M + 1)]),
-            f"Def_F_Active_{n}",
-        )
-
-        # Conservation of Leaders (One leader dies per CZ/F)
-        prob += (
-            pulp.lpSum([L[n][x][x] - L[n + 1][x][x] for x in range(M + 1)])
-            == y_CZ_active[n] + y_F_active[n],
-            f"Leader_Destruction_{n}",
-        )
-
-        # DSU Monotonicity
-        for x in range(M + 1):
-            for y in range(M + 1):
-                prob += (
-                    L[n][x][y] - L[n + 1][x][y] <= L[n][x][x] - L[n + 1][x][x],
-                    f"DSU_Mono_{n}_{x}_{y}",
-                )
-
-        # E-Matrix CZ/F Global Inertia
-        for a in range(M + 1):
-            for b in range(a + 1, M + 1):
-                f_sum = pulp.lpSum(
+            # One operation per step
+            self.prob += (
+                self.y_dummy[n]
+                + pulp.lpSum([self.y_LC[n][i] for i in range(self.M + 1)])
+                + pulp.lpSum(
                     [
-                        y_F[n][a][x] + y_F[n][x][a] + y_F[n][b][x] + y_F[n][x][b]
-                        for x in range(M + 1)
+                        self.y_CZ[n][i][j] + self.y_F[n][i][j]
+                        for i in range(self.M + 1)
+                        for j in range(self.M + 1)
                     ]
                 )
-                rhs_inertia = y_CZ[n][a][b] + f_sum + 1 - y_CZ_active[n] - y_F_active[n]
-
-                prob += (
-                    E[n + 1][a][b] - E[n][a][b] <= rhs_inertia,
-                    f"Global_E_UB_{n}_{a}_{b}",
-                )
-                prob += (
-                    E[n][a][b] - E[n + 1][a][b] <= rhs_inertia,
-                    f"Global_E_LB_{n}_{a}_{b}",
-                )
-
-        # E-Matrix Base & Component Logic for CZ/F
-        for i in range(M + 1):
-            for j in range(M + 1):
-
-                # Prevent CZ/F gates on nodes already in the same component
-                for x in range(M + 1):
-                    prob += (
-                        y_CZ[n][i][j] + y_F[n][i][j] <= 2 - L[n][x][j] - L[n][x][i],
-                        f"CZ_F_Limit_{n}_{i}_{j}_{x}",
-                    )
-
-                # Base Edge Formation
-                if i != j:
-                    prob += (
-                        E[n + 1][min(i, j)][max(i, j)] >= y_CZ[n][i][j] + y_F[n][i][j],
-                        f"E_CZ_F_Base_{n}_{i}_{j}",
-                    )
-
-    # ==========================================
-    # 7. F Operation Edge Logic
-    # ==========================================
-    for n in range(N + 1):
-        for i in range(M + 1):
-            for j in range(M + 1):
-                if i != j:
-                    for k in range(M + 1):
-                        if k != i and k != j:
-
-                            ik_min, ik_max = min(i, k), max(i, k)
-                            jk_min, jk_max = min(j, k), max(j, k)
-
-                            e_ik_n1 = E[n + 1][ik_min][ik_max]
-                            e_ik_n = E[n][ik_min][ik_max]
-                            e_jk_n1 = E[n + 1][jk_min][jk_max]
-                            e_jk_n = E[n][jk_min][jk_max]
-
-                            # IF logic
-                            prob += (
-                                e_ik_n1 >= y_F[n][i][j] + e_jk_n - 1,
-                                f"F_Ek1_{n}_{i}_{j}_{k}",
-                            )
-                            prob += (
-                                e_jk_n1 <= 2 - y_F[n][i][j] - e_jk_n,
-                                f"F_Ek2_{n}_{i}_{j}_{k}",
-                            )
-
-                            # ONLY IF logic
-                            rhs_f = y_F[n][i][j] + e_jk_n + 2 * (1 - y_F[n][i][j])
-
-                            prob += (
-                                2 * (e_ik_n1 - e_ik_n) <= rhs_f,
-                                f"F_OnlyIf_UB_{n}_{i}_{j}_{k}",
-                            )
-                            prob += (
-                                2 * (e_jk_n - e_jk_n1) <= rhs_f,
-                                f"F_OnlyIf_LB_{n}_{i}_{j}_{k}",
-                            )
-
-                            # ANTI-LEAK logic
-                            prob += (
-                                e_ik_n - e_ik_n1 <= 1 - y_F[n][i][j],
-                                f"F_AntiLeak_1_{n}_{i}_{j}_{k}",
-                            )
-                            prob += (
-                                e_jk_n1 - e_jk_n <= 1 - y_F[n][i][j],
-                                f"F_AntiLeak_2_{n}_{i}_{j}_{k}",
-                            )
-
-    # ==========================================
-    # 8. Target Graph Permutation / Isomorphism
-    # ==========================================
-    # Assumes T is the upper-triangular target matrix parameter
-    K_nodes = len(T)
-    n_target = N
-
-    # 1. Variables
-    d = pulp.LpVariable.dicts("d", range(M + 1), cat="Binary")
-    Mask = pulp.LpVariable.dicts("Mask", (range(M + 1), range(M + 1)), cat="Binary")
-    p = pulp.LpVariable.dicts("p", (range(M + 1), range(K_nodes)), cat="Binary")
-
-    # Continuous Z >= 0 to linearize Mask * p
-    Z = pulp.LpVariable.dicts(
-        "Z", (range(M + 1), range(M + 1), range(K_nodes)), lowBound=0, cat="Continuous"
-    )
-
-    # Optional but recommended: Add a penalty to the objective to prevent the solver
-    # from unnecessarily deleting qubits that don't need to be dropped.
-    # prob.objective += pulp.lpSum([(1 - d[i]) * 1.0 for i in range(M + 1)])
-
-    # 2. Final Vertex Deletion Mask
-    for i in range(M + 1):
-        for j in range(i + 1, M + 1):  # Strictly i < j
-            prob += Mask[i][j] <= E[n_target + 1][i][j], f"Mask_UB_E_{i}_{j}"
-            prob += Mask[i][j] <= d[i], f"Mask_UB_di_{i}_{j}"
-            prob += Mask[i][j] <= d[j], f"Mask_UB_dj_{i}_{j}"
-            prob += (
-                Mask[i][j] >= E[n_target + 1][i][j] + d[i] + d[j] - 2,
-                f"Mask_LB_{i}_{j}",
+                == 1,
+                f"One_Op_{n}",
             )
 
-    # 3. Permutation Mapping (Asymmetric: M physical to K logical)
-    for i in range(M + 1):
-        # A physical node maps to exactly 1 target vertex IF kept. 0 if deleted.
-        prob += (
-            pulp.lpSum([p[i][j] for j in range(K_nodes)]) == d[i],
-            f"Perm_Row_Sum_{i}",
+            # Dummy monotonicity
+            if n < self.N:
+                self.prob += self.y_dummy[n + 1] >= self.y_dummy[n], f"Dummy_Mono_{n}"
+
+            # Dummy E-Matrix inertia
+            for i in range(self.M + 1):
+                for j in range(i + 1, self.M + 1):
+                    self.prob += (
+                        self.E[n + 1][i][j] - self.E[n][i][j] <= 1 - self.y_dummy[n],
+                        f"Dum_E_UB_{n}_{i}_{j}",
+                    )
+                    self.prob += (
+                        self.E[n][i][j] - self.E[n + 1][i][j] <= 1 - self.y_dummy[n],
+                        f"Dum_E_LB_{n}_{i}_{j}",
+                    )
+
+            # Parity checks
+            for i in range(self.M + 1):
+                for j in range(self.M + 1):
+                    if i % 2 != j % 2:
+                        self.prob += self.y_CZ[n][i][j] == 0, f"Parity_CZ_{n}_{i}_{j}"
+                        self.prob += self.y_F[n][i][j] == 0, f"Parity_F_{n}_{i}_{j}"
+
+        # Global Structural Matrices
+        for n in range(self.N + 2):
+            for j in range(self.M + 1):
+                self.prob += (
+                    pulp.lpSum([self.L[n][i][j] for i in range(self.M + 1)]) == 1,
+                    f"DSU_Col_{n}_{j}",
+                )
+
+            for i in range(self.M + 1):
+                for j in range(self.M + 1):
+                    self.prob += (
+                        self.L[n][i][j] <= self.L[n][i][i],
+                        f"DSU_Diag_{n}_{i}_{j}",
+                    )
+
+                # Enforce strictly upper triangular E-matrix
+                for j in range(i + 1):
+                    self.prob += self.E[n][i][j] == 0, f"E_Lower_{n}_{i}_{j}"
+
+        for n in range(self.N + 1):
+            for i in range(self.M + 1):
+                for j in range(self.M + 1):
+                    for x in range(self.M + 1):
+                        self.prob += (
+                            self.y_CZ[n][i][j] + self.y_F[n][i][j]
+                            <= 2 - self.L[n][x][j] - self.L[n][x][i],
+                            f"CZ_F_Deny_{n}_{i}_{j}_{x}",
+                        )
+
+        for n in range(self.N + 2):
+            for x in range(self.M + 1):
+                for y in range(self.M + 1):
+                    for z in range(
+                        y + 1, self.M + 1
+                    ):  # strictly y < z to match upper-triangular E
+                        self.prob += (
+                            self.L[n][x][y] - self.L[n][x][z] <= 1 - self.E[n][y][z],
+                            f"Edge_L_UB_{n}_{x}_{y}_{z}",
+                        )
+                        self.prob += (
+                            self.L[n][x][z] - self.L[n][x][y] <= 1 - self.E[n][y][z],
+                            f"Edge_L_LB_{n}_{x}_{y}_{z}",
+                        )
+
+    def _add_lc_constraints(self):
+        for n in range(self.N + 1):
+            for i in range(self.M + 1):
+
+                # 1. Freeze edges directly connected to LC target
+                for j in range(i + 1, self.M + 1):
+                    self.prob += (
+                        self.E[n + 1][i][j] - self.E[n][i][j]
+                        <= 1 - self.y_LC[n][i] - self.y_LC[n][j],
+                        f"LC_Frz_UB_{n}_{i}_{j}",
+                    )
+                    self.prob += (
+                        self.E[n][i][j] - self.E[n + 1][i][j]
+                        <= 1 - self.y_LC[n][i] - self.y_LC[n][j],
+                        f"LC_Frz_LB_{n}_{i}_{j}",
+                    )
+
+                # 2. LC Edge Flip Logic via McCormick Envelopes
+                for j1 in range(self.M + 1):
+                    for j2 in range(j1 + 1, self.M + 1):  # Strictly j1 < j2
+                        if i != j1 and i != j2:
+
+                            e1 = self.E[n][min(i, j1)][max(i, j1)]
+                            e2 = self.E[n][min(i, j2)][max(i, j2)]
+                            yLC = self.y_LC[n][i]
+
+                            l_var = self.l_aux[n][i][j1][j2]
+                            z_var = self.z_aux[n][i][j1][j2]
+
+                            # l = E_n(i, j1) AND E_n(i, j2)
+                            self.prob += l_var <= e1, f"LC_l_UB1_{n}_{i}_{j1}_{j2}"
+                            self.prob += l_var <= e2, f"LC_l_UB2_{n}_{i}_{j1}_{j2}"
+                            self.prob += (
+                                l_var >= e2 + e1 - 1,
+                                f"LC_l_LB_{n}_{i}_{j1}_{j2}",
+                            )
+
+                            # z = l AND y_LC(i)
+                            self.prob += z_var <= l_var, f"LC_z_UB1_{n}_{i}_{j1}_{j2}"
+                            self.prob += z_var <= yLC, f"LC_z_UB2_{n}_{i}_{j1}_{j2}"
+                            self.prob += (
+                                z_var >= l_var + yLC - 1,
+                                f"LC_z_LB_{n}_{i}_{j1}_{j2}",
+                            )
+
+                            e_n1_j = self.E[n + 1][j1][j2]
+                            e_n_j = self.E[n][j1][j2]
+
+                            # Edge Flip Bounds
+                            self.prob += (
+                                e_n1_j + e_n_j >= z_var,
+                                f"LC_Flip_LB1_{n}_{i}_{j1}_{j2}",
+                            )
+                            self.prob += (
+                                e_n1_j + e_n_j <= 2 - z_var,
+                                f"LC_Flip_UB1_{n}_{i}_{j1}_{j2}",
+                            )
+                            self.prob += (
+                                e_n1_j - e_n_j <= z_var + 1 - yLC,
+                                f"LC_Flip_UB2_{n}_{i}_{j1}_{j2}",
+                            )
+                            self.prob += (
+                                e_n_j - e_n1_j <= z_var + 1 - yLC,
+                                f"LC_Flip_LB2_{n}_{i}_{j1}_{j2}",
+                            )
+
+    def _add_cz_and_f_shared_logic(self):
+        for n in range(self.N + 1):
+
+            # Active Flags
+            self.prob += (
+                self.y_CZ_active[n]
+                == pulp.lpSum(
+                    [
+                        self.y_CZ[n][a][b]
+                        for a in range(self.M + 1)
+                        for b in range(self.M + 1)
+                    ]
+                ),
+                f"CZ_Active_{n}",
+            )
+            self.prob += (
+                self.y_F_active[n]
+                == pulp.lpSum(
+                    [
+                        self.y_F[n][a][b]
+                        for a in range(self.M + 1)
+                        for b in range(self.M + 1)
+                    ]
+                ),
+                f"F_Active_{n}",
+            )
+
+            # Conservation of Leaders (One death per gate)
+            self.prob += (
+                pulp.lpSum(
+                    [self.L[n][x][x] - self.L[n + 1][x][x] for x in range(self.M + 1)]
+                )
+                == self.y_CZ_active[n] + self.y_F_active[n],
+                f"Lead_Kill_{n}",
+            )
+
+            # Base CZ & F Edge Formation between active nodes (i, j)
+            for i in range(self.M + 1):
+                for j in range(self.M + 1):
+                    if i != j:
+                        self.prob += (
+                            self.E[n + 1][min(i, j)][max(i, j)]
+                            >= self.y_CZ[n][i][j] + self.y_F[n][i][j],
+                            f"CZ_F_Base_{n}_{i}_{j}",
+                        )
+
+            # Localized CZ Inertia
+            for j1 in range(self.M + 1):
+                for j2 in range(j1 + 1, self.M + 1):
+                    rhs_cz = (
+                        self.y_CZ[n][j1][j2]
+                        + self.y_CZ[n][j2][j1]
+                        + 1
+                        - self.y_CZ_active[n]
+                    )
+                    self.prob += (
+                        self.E[n + 1][j1][j2] - self.E[n][j1][j2] <= rhs_cz,
+                        f"CZ_Inert_UB_{n}_{j1}_{j2}",
+                    )
+                    self.prob += (
+                        self.E[n][j1][j2] - self.E[n + 1][j1][j2] <= rhs_cz,
+                        f"CZ_Inert_LB_{n}_{j1}_{j2}",
+                    )
+
+            # for a in range(self.M + 1):
+            #     for b in range(a + 1, self.M + 1):
+            #         f_sum = pulp.lpSum(
+            #             [
+            #                 self.y_F[n][a][x]
+            #                 + self.y_F[n][x][a]
+            #                 + self.y_F[n][b][x]
+            #                 + self.y_F[n][x][b]
+            #                 for x in range(self.M + 1)
+            #             ]
+            #         )
+            #         rhs_inertia = (
+            #             self.y_CZ[n][a][b]
+            #             + f_sum
+            #             + 1
+            #             - self.y_CZ_active[n]
+            #             - self.y_F_active[n]
+            #         )
+
+            #         self.prob += (
+            #             self.E[n + 1][a][b] - self.E[n][a][b] <= rhs_inertia,
+            #             f"Glb_E_UB_{n}_{a}_{b}",
+            #         )
+            #         self.prob += (
+            #             self.E[n][a][b] - self.E[n + 1][a][b] <= rhs_inertia,
+            #             f"Glb_E_LB_{n}_{a}_{b}",
+            #         )
+
+    def _add_f_edge_logic(self):
+        for n in range(self.N + 1):
+
+            # 1. McCormick Envelopes for f_aux
+            for i in range(self.M + 1):
+                for j in range(self.M + 1):
+                    if i != j:
+                        for k in range(self.M + 1):
+
+                            f_var = self.f_aux[n][i][j][k]
+                            yF = self.y_F[n][i][j]
+
+                            # Global Upper Bound
+                            self.prob += f_var <= yF, f"f_UB_y_{n}_{i}_{j}_{k}"
+
+                            if j != k:
+                                # Normal neighbor absorption logic
+                                e_jk = self.E[n][min(j, k)][max(j, k)]
+                                self.prob += f_var <= e_jk, f"f_UB_E_{n}_{i}_{j}_{k}"
+                                self.prob += (
+                                    f_var >= e_jk - 1 + yF,
+                                    f"f_LB_{n}_{i}_{j}_{k}",
+                                )
+                            else:
+                                self.prob += f_var >= yF, f"f_Self_Loop_{n}_{i}_{j}_{j}"
+
+            # 2. Localized F-Inertia & Spawning/Destruction
+            for a in range(self.M + 1):
+                for b in range(a + 1, self.M + 1):
+
+                    # Spawning sum: Filter out j=a (first list) and j=b (second list)
+                    sum_f_spawn = pulp.lpSum(
+                        [self.f_aux[n][a][j][b] for j in range(self.M + 1) if j != a]
+                        + [self.f_aux[n][b][j][a] for j in range(self.M + 1) if j != b]
+                    )
+
+                    # Destruction sum: Filter out i=a (first list) and i=b (second list)
+                    sum_f_destroy = pulp.lpSum(
+                        [self.f_aux[n][i][a][b] for i in range(self.M + 1) if i != a]
+                        + [self.f_aux[n][i][b][a] for i in range(self.M + 1) if i != b]
+                    )
+
+                    e_n1 = self.E[n + 1][a][b]
+                    e_n = self.E[n][a][b]
+                    yF_act = self.y_F_active[n]
+
+                    self.prob += (
+                        e_n1 - e_n <= sum_f_spawn - sum_f_destroy + 1 - yF_act,
+                        f"F_Inertia_UB_{n}_{a}_{b}",
+                    )
+                    self.prob += (
+                        e_n1 - e_n >= sum_f_spawn - sum_f_destroy - 1 + yF_act,
+                        f"F_Inertia_LB_{n}_{a}_{b}",
+                    )
+
+    def _add_isomorphism_and_deletion(self):
+
+        # 1. Precompute target graph properties (Strictly Upper Triangular)
+        target_degrees = []
+        for j in range(self.K_nodes):
+            # Sum column j (edges to smaller indices) + row j (edges to larger indices)
+            deg = sum([self.T[l][j] for l in range(j)]) + sum(
+                [self.T[j][l] for l in range(j + 1, self.K_nodes)]
+            )
+            target_degrees.append(deg)
+
+        # In an upper triangular matrix, every edge is represented exactly once
+        total_target_edges = sum(
+            [
+                self.T[a][b]
+                for a in range(self.K_nodes)
+                for b in range(a + 1, self.K_nodes)
+            ]
         )
 
-    for j in range(K_nodes):
-        # Every target vertex must be mapped exactly once.
-        prob += pulp.lpSum([p[i][j] for i in range(M + 1)]) == 1, f"Perm_Col_Sum_{j}"
+        # 3. Global Edge Count Match (O(1) prune)
+        self.prob += (
+            pulp.lpSum(
+                [
+                    self.Mask[i][j]
+                    for i in range(self.M + 1)
+                    for j in range(i + 1, self.M + 1)
+                ]
+            )
+            == total_target_edges,
+            "Global_Edge_Count",
+        )
 
-    # 4. Asymmetric McCormick Linearization & Isomorphism Match
-    for i in range(M + 1):
-        for j in range(K_nodes):
+        # 5. Exact Degree Matching (Aggressive Branch Pruning)
+        for i in range(self.M + 1):
+            # Physical degree calculation (Upper-triangular aware)
+            physical_deg = pulp.lpSum([self.Mask[k][i] for k in range(i)]) + pulp.lpSum(
+                [self.Mask[i][k] for k in range(i + 1, self.M + 1)]
+            )
 
-            for k in range(M + 1):
-                if i != k:
-                    ik_min, ik_max = min(i, k), max(i, k)
+            # Map the physical degree to the exact assigned target degree
+            assigned_target_deg = pulp.lpSum(
+                [self.p[i][j] * target_degrees[j] for j in range(self.K_nodes)]
+            )
 
-                    # McCormick envelope bounding against the Masked matrix
-                    prob += (
-                        Z[i][k][j] <= Mask[ik_min][ik_max],
-                        f"Z_Bound_Mask_{i}_{k}_{j}",
-                    )
-                    prob += Z[i][k][j] <= p[k][j], f"Z_Bound_p_{i}_{k}_{j}"
-                    prob += (
-                        Z[i][k][j] >= Mask[ik_min][ik_max] + p[k][j] - 1,
-                        f"Z_Bound_Base_{i}_{k}_{j}",
-                    )
+            self.prob += physical_deg == assigned_target_deg, f"Degree_Match_{i}"
 
-            # Left side: Sum of Z_{i,k,j} over all valid physical nodes k
-            lhs = pulp.lpSum([Z[i][k][j] for k in range(M + 1) if k != i])
+        for i in range(self.M + 1):
+            for j in range(i + 1, self.M + 1):
+                # Mask bounded by final physical E-matrix state
+                self.prob += (
+                    self.Mask[i][j] <= self.E[self.n_target][i][j],
+                    f"Mask_UB_E_{i}_{j}",
+                )
+                self.prob += self.Mask[i][j] <= self.c[i], f"Mask_UB_c_i_{i}_{j}"
+                self.prob += self.Mask[i][j] <= self.c[j], f"Mask_UB_c_j_{i}_{j}"
+                self.prob += (
+                    self.Mask[i][j]
+                    >= self.E[self.n_target][i][j] + self.c[i] + self.c[j] - 2,
+                    f"Mask_LB_{i}_{j}",
+                )
 
-            # Right side: Target matrix mapping over logical target indices l
-            # (Assuming T is upper-triangular or symmetric, handling the l < j and l > j sides)
-            rhs_1 = pulp.lpSum([p[i][l] * T[l][j] for l in range(j)])
-            rhs_2 = pulp.lpSum([p[i][l] * T[j][l] for l in range(j + 1, K_nodes)])
+        # 2. Permutation Mapping
+        for i in range(self.M + 1):
+            self.prob += (
+                pulp.lpSum([self.p[i][j] for j in range(self.K_nodes)]) == self.c[i],
+                f"Perm_Row_{i}",
+            )
 
-            # Isomorphism constraint
-            prob += lhs == rhs_1 + rhs_2, f"Iso_Match_{i}_{j}"
-    return prob
+        for j in range(self.K_nodes):
+            self.prob += (
+                pulp.lpSum([self.p[i][j] for i in range(self.M + 1)]) == 1,
+                f"Perm_Col_{j}",
+            )
+
+        # 3. Asymmetric Linearization & Isomorphism check
+        for i in range(self.M + 1):
+            for j in range(self.K_nodes):
+
+                # Z bounds against Mask matrix
+                for k in range(self.M + 1):
+                    if k != i:
+                        ik_min, ik_max = min(i, k), max(i, k)
+
+                        self.prob += (
+                            self.Z[i][k][j] <= self.Mask[ik_min][ik_max],
+                            f"Z_Mask_{i}_{k}_{j}",
+                        )
+                        self.prob += self.Z[i][k][j] <= self.p[k][j], f"Z_p_{i}_{k}_{j}"
+                        self.prob += (
+                            self.Z[i][k][j]
+                            >= self.Mask[ik_min][ik_max] + self.p[k][j] - 1,
+                            f"Z_Base_{i}_{k}_{j}",
+                        )
+
+                lhs = pulp.lpSum([self.Z[i][k][j] for k in range(self.M + 1) if k != i])
+
+                # Target graph mapping limits
+                rhs_1 = pulp.lpSum([self.p[i][l] * self.T[l][j] for l in range(j)])
+                rhs_2 = pulp.lpSum(
+                    [self.p[i][l] * self.T[j][l] for l in range(j + 1, self.K_nodes)]
+                )
+
+                self.prob += lhs == rhs_1 + rhs_2, f"Iso_Match_{i}_{j}"
 
 
 # ==========================================
@@ -390,31 +574,26 @@ def build_model(N, M, E_0, T, L_0):
 # ==========================================
 if __name__ == "__main__":
     # Mocking small parameters
-    N_val = 3
-    M_val = 5
+    N_val = 6
+    M_val = 3
 
     E_0 = [
-        [0, 1, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 1, 0, 0],
-        [0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 1],
-        [0, 0, 0, 0, 0, 0],
+        [0, 1, 0, 0],
+        [0, 0, 0, 0],
+        [0, 0, 0, 1],
+        [0, 0, 0, 0],
     ]
     L_0 = [
-        [1, 1, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0],
-        [0, 0, 1, 1, 0, 0],
-        [0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 1, 1],
-        [0, 0, 0, 0, 0, 0],
+        [1, 1, 0, 0],
+        [0, 0, 0, 0],
+        [0, 0, 1, 1],
+        [0, 0, 0, 0],
     ]
     T = [
-        [0, 1, 0, 0, 0],
-        [0, 0, 1, 0, 0],
-        [0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 1],
-        [0, 0, 0, 0, 0],
+        [0, 1, 0, 0],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1],
+        [0, 0, 0, 0],
     ]
 
     # E_0 = [[0, 1, 0, 0], [0, 0, 0, 0], [0, 0, 0, 1], [0, 0, 0, 0]]
@@ -494,8 +673,3 @@ if __name__ == "__main__":
             and not ("active" in v.name)  # Exclude active sum variables
         ):
             print(f"{v.name} = 1.0")
-
-    for v in model.variables():
-        # Using > 0.5 to safely check binary 1 against floating point inaccuracies
-        if v.name.startswith("d_") and v.varValue is not None and v.varValue < 0.5:
-            print(f"{v.name} = 0.0")

@@ -1,6 +1,7 @@
 import networkx as nx
 import matplotlib.pyplot as plt
 from typing import List, Tuple
+import z3
 
 # import graphstate_opt as gso
 import random
@@ -280,7 +281,7 @@ def get_adjacency_matrix(graph):
     return matrix
 
 
-def get_operations(model):
+def get_operations_ilp(model):
     operations = []
     for v in model.variables():
         if (
@@ -292,6 +293,52 @@ def get_operations(model):
         ):
             operations.append(v.name)
     return operations
+
+
+def get_operations_sat(n, m, LC, CZ, F, c, model):
+    operations = []
+    for n in range(n):
+
+        for i in range(m):
+            if z3.is_true(model.evaluate(LC[n][i])):
+                operations.append(f"LC_{n}_{i}")
+                break
+            for j in range(i + 1, m):
+                if z3.is_true(model.evaluate(CZ[n][i][j])):
+                    operations.append(f"CZ_{n}_{i}_{j}")
+                    break
+                if z3.is_true(model.evaluate(F[n][i][j])):
+                    operations.append(f"F_{n}_{i}_{j}")
+                    break
+
+    for i in range(m):
+        if not z3.is_true(model.evaluate(c[i])):
+            operations.append(f"delete_{i}")
+    return operations
+
+
+def get_graph_from_operations_sat(operations, n, G=None):
+    # Create an empty graph with n nodes
+    if G is None:
+        G = gen_bell_tree(n)
+
+    # Apply operations to the graph
+    for op in operations:
+        parts = op.split("_")
+        op_type = parts[0]
+        node1 = int(parts[2])
+        node2 = int(parts[3]) if len(parts) > 3 else None
+
+        if op_type == "CZ":
+            G = cz_gate_toggle(G, node1, node2)
+        elif op_type == "F":
+            G = f_gate(G, node1, node2)
+        elif op_type == "LC":
+            G = local_complement(G, node1)
+        elif op_type == "delete":
+            G.remove_node(node1)
+
+    return G
 
 
 def get_node_deletion_operations(model):

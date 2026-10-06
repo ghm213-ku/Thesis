@@ -24,7 +24,7 @@ class ILPModel:
 
         self.prob = pulp.LpProblem("Quantum_Circuit_Routing", pulp.LpMinimize)
 
-    def build(self):
+    def build(self, isomorphism=True):
         """Master build method. Acts as the table of contents for the model."""
         self._define_variables()
         self._define_objective()
@@ -35,6 +35,10 @@ class ILPModel:
         self._add_cz_and_f_shared_logic()
         self._add_f_edge_logic()
         self._add_isomorphism_and_deletion()
+        if isomorphism:
+            self._add_isomorphism_and_deletion()
+        else:
+            self._add_target_graph()
 
         return self.prob
 
@@ -106,6 +110,15 @@ class ILPModel:
             ),
             "Minimize_Cost",
         )
+
+    def _add_target_graph(self):
+        # 1. Enforce the target graph at step N+1
+        for i in range(self.K_nodes):
+            for j in range(i + 1, self.K_nodes):  # strictly upper triangular
+                self.prob += (
+                    self.E[self.n_target][i][j] == self.T[i][j],
+                    f"Target_Edge_{i}_{j}",
+                )
 
     def _add_boundary_conditions(self):
         for i in range(self.M + 1):

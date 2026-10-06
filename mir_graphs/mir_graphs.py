@@ -43,7 +43,7 @@ def create_recipes_from_json(nodes: int):
     return recipes
 
 
-def get_graphs_from_recipes(nodes: int):
+def get_graphs_from_recipes(nodes: int) -> list[nx.Graph]:
     recipes = create_recipes_from_json(nodes)
     graphs = []
     for recipe in recipes:
@@ -62,7 +62,7 @@ def get_graphs_from_recipes(nodes: int):
                 G = graph_utilities.local_complement(
                     G, int(parts[1].split(",")[0][:-1])
                 )
-        # print(f"Graph from recipe: {recipe}")
-        # print(f"Graph edges: {G.edges()}")
+        print(f"Graph from recipe: {recipe}")
+        print(f"Graph edges: {G.edges()}")
         graphs.append(G)
     return graphs
